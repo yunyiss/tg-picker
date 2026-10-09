@@ -1,2 +1,8 @@
-telethon>=1.34
+# 图形界面（cache_picker / gallery_picker / tg_picker 均需要）
 Pillow>=10.0
+
+# 直读 tdata 缓存所需：TDEF 缓存的 AES 解密
+pycryptodome>=3.19
+
+# 仅 tg_picker.py（按群/频道在线挑选下载）需要
+telethon>=1.34
