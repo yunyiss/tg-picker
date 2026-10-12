@@ -1,0 +1,6 @@
+# 开发/测试依赖（运行工具本身不需要）：
+#   .venv\Scripts\pip install -r requirements-dev.txt
+-r requirements.txt
+
+pytest>=8,<10
+ruff>=0.6

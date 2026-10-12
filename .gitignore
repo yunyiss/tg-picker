@@ -17,6 +17,10 @@ env/
 .ruff_cache/
 .mypy_cache/
 
+# 工具在仓库根目录留下的临时目录（当 TEMP 指向当前目录时会出现）
+pip-*/
+pytest-of-*/
+
 # ---- 运行时产物（缩略图缓存、索引、预览/抽帧临时文件）----
 cache_thumbs/
 preview/
