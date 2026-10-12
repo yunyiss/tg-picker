@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """直接读取 Telegram Desktop 的 tdata 缓存（TDEF 加密媒体）。
 
 不落地中间文件：按需解密 → 嗅探类型 → 生成缩略图缓存 → 记录索引。
@@ -50,36 +49,18 @@ _FFMPEG_CACHE: str | None = None
 
 # ---------------------------------------------------------------------------
 # 通用小工具
+#
+# human_size / unique_path 已收敛到 ui_kit（两个入口共用，避免实现漂移），
+# 本模块不再重复定义。
 # ---------------------------------------------------------------------------
-def human_size(n: int | None) -> str:
-    """把字节数格式化成可读文本（如 1.5 MB）；falsy 值返回 '-'。"""
-    if not n:
-        return "-"
-    size = float(n)
-    for unit in ("B", "KB", "MB", "GB"):
-        if size < 1024 or unit == "GB":
-            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
-        size /= 1024
-    return f"{size:.1f} GB"
-
-
-def unique_path(path: Path) -> Path:
-    """目标已存在时追加 (1)(2)… 后缀，绝不覆盖已有文件。"""
-    path = Path(path)
-    if not path.exists():
-        return path
-    stem, suffix = path.stem, path.suffix
-    for i in range(1, 100000):
-        cand = path.with_name(f"{stem} ({i}){suffix}")
-        if not cand.exists():
-            return cand
-    raise RuntimeError(t("cs.err_name_conflict", name=path.name))
 
 
 # Windows：GUI 通过 pythonw.exe（无控制台）启动时，每次调用 ffmpeg.exe
 # 这类控制台程序，系统都会为它**新建一个控制台窗口**并闪一下。缩略图是
 # 边滚动边生成的，于是表现为"加载时不断弹窗"。必须显式要求不创建窗口。
-_NO_WINDOW_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+_NO_WINDOW_FLAGS = (
+    getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+)
 _HAS_STARTUPINFO = hasattr(subprocess, "STARTUPINFO")
 
 
@@ -321,6 +302,7 @@ class CacheReader:
     """持有一份 LocalKey，按需解密 tdata 缓存。只读。"""
 
     def __init__(self, tdata: Path, passcode: str = "") -> None:
+        """派生 LocalKey 并准备解密器；tdata 不存在或需密码时抛 CacheError。"""
         tdata = Path(tdata)
         if not tdata.is_dir():
             raise CacheError(t("cs.err_tdata_missing", tdata=tdata))
@@ -413,6 +395,7 @@ def load_index(index_path: Path, tdata: Path) -> dict:
 
 
 def save_index(index_path: Path, tdata: Path, entries: dict) -> None:
+    """把索引写成 JSON；写失败只忽略（只是缓存，丢了会重新解密）。"""
     try:
         Path(index_path).parent.mkdir(parents=True, exist_ok=True)
         Path(index_path).write_text(
@@ -425,6 +408,7 @@ def save_index(index_path: Path, tdata: Path, entries: dict) -> None:
 
 
 def entry_thumb_path(thumb_dir: Path, key: str) -> Path:
+    """缩略图的落盘路径：按哈希前两位分子目录，避免单目录文件过多。"""
     return Path(thumb_dir) / key[:2] / f"{key}.jpg"
 
 
@@ -515,6 +499,9 @@ def prepare(
         result.append(ent)
         stats["ok"] += 1
 
+    if cancel_event is not None and cancel_event.is_set():
+        # 被取消：不写索引，避免把"扫到一半"的结果落盘（下次启动会重新解密）
+        return result, stats
     save_index(index_path, tdata, new_index)
     return result, stats
 

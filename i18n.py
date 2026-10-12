@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """轻量国际化（i18n）。
 
 语言资源放在 ``locales/<lang>.json``，使用**点号命名空间的扁平键**
@@ -20,8 +19,8 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 HERE = Path(__file__).resolve().parent
 LOCALES_DIR = HERE / "locales"
@@ -119,9 +118,21 @@ def save_language(lang: str) -> None:
 
 
 def on_change(cb: Callable[[], None]) -> None:
-    """注册语言切换回调（界面借此实时刷新）。"""
+    """注册语言切换回调（界面借此实时刷新）。重复注册同一回调只保留一份。"""
     if cb not in _listeners:
         _listeners.append(cb)
+
+
+def off_change(cb: Callable[[], None]) -> None:
+    """注销语言切换回调。
+
+    窗口关闭时应调用，否则已销毁的界面仍留在监听表里（其 retranslate 会不断
+    抛 TclError 并被 :func:`set_language` 吞掉，属于隐性泄漏）。
+    """
+    try:
+        _listeners.remove(cb)
+    except ValueError:
+        pass
 
 
 def t(key: str, **kwargs) -> str:

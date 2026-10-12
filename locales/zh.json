@@ -13,6 +13,7 @@
   "common.ready": "就绪",
   "common.cancel": "取消",
   "common.submit": "提交",
+  "common.err_name_conflict": "命名冲突过多，无法为 {name} 找到可用名字",
 
   "kind.image": "图片",
   "kind.video": "视频",
@@ -117,6 +118,7 @@
   "online.log.login_failed": "登录失败：{name}: {exc}",
   "online.log.need_chat": "请填写群/频道",
   "online.log.invite": "检测到邀请链接，尝试加入会话…",
+  "online.log.invite_failed": "已通过邀请链接加入，但未能获取会话信息；请改用 @用户名 或数字 ID 再试。",
   "online.log.need_login": "请先登录。",
   "online.log.entity": "已定位会话：{title}",
   "online.log.scanning": "扫描 {scanned} 条消息，已找到 {found} 个媒体…",
@@ -138,7 +140,6 @@
   "online.log.dl_single_failed": "下载失败：{name}: {exc}",
   "online.log.submit_err": "[{label}] 异常: {name}: {exc}",
   "online.log.cancel_req": "已请求取消…",
-  "online.err_name_conflict": "命名冲突过多: {path}",
 
   "online.dialog.api_id_num": "api_id 必须是数字",
   "online.dialog.need_hash_phone": "请填写 api_hash 和手机号（含国家码，如 +8613800000000）",
@@ -157,6 +158,5 @@
   "cs.err_tdata_missing": "tdata 目录不存在：{tdata}",
   "cs.err_passcode": "该 tdata 设有本地锁定密码（Telegram 设置→隐私与安全→锁定密码），请填写密码后重试",
   "cs.err_too_large": "文件过大，已跳过：{name}",
-  "cs.err_name_conflict": "命名冲突过多，无法为 {name} 找到可用名字",
   "cs.progress_parse": "解析缓存 {i}/{total}"
 }

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Telegram 缓存挑选器（cache-picker）
 
 直接读取 Telegram Desktop 的 tdata 缓存，边看边挑边保存——不需要先批量导出。
@@ -17,15 +16,15 @@
 from __future__ import annotations
 
 import concurrent.futures
-import json
 import os
 import queue
 import sys
 import threading
 import time
 import tkinter as tk
+import traceback
 from collections import OrderedDict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -34,8 +33,10 @@ from PIL import Image, ImageTk
 
 import cache_source as cs
 import i18n
-from cache_source import human_size, unique_path
+import ui_kit
 from i18n import t
+from ui_kit import FONT, human_size, unique_path
+from ui_lang import LangMixin
 
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "cache_config.json"
@@ -94,13 +95,13 @@ SUB = "#9aa0a8"           # 二级文字
 MUTED = "#7d838b"         # 三级文字（对 PANEL 约 3.6:1，可读）
 SEP = "#3a3a44"           # 分隔线（对 PANEL 约 1.6:1，肉眼可辨）
 
-FONT = "Microsoft YaHei UI"
+# 字体见 ui_kit（与在线挑选器共用同一常量；配色两端故意不同，故不共享）
 
 # 网格几何：CARD_* 是卡片实际绘制尺寸，CELL_* 是含间隙的步距。
 # 两者分开，卡片之间才会露出 BG 形成缝隙。
 #
-# 卡片内部纵向分配（CARD_H 必须容纳）：
-#   上边距 7 + 图片方框 IMG_BOX + 间隙 6 + 信息行 ~17 + 下边距 6
+# 卡片内部纵向分配（CARD_H 必须容纳）；与 _place_cell 里的 box_y 偏移保持一致：
+#   上边距 8 + 图片方框 IMG_BOX + 间隙 6 + 信息行 ~17 + 下边距 6
 CARD_W, CARD_H = 164, 196
 GAP = 10
 CELL_W, CELL_H = CARD_W + GAP, CARD_H + GAP
@@ -109,12 +110,17 @@ IMG_BOX = 144             # 卡片内图片方框边长
 CORNER = 9                # 卡片圆角半径
 MAX_THUMBS_IN_MEM = 600   # 内存中保留的缩略图上限
 PHOTO_BATCH_PER_TICK = 6  # 每个 UI 周期最多转换几张（避免卡顿）
-assert 7 + IMG_BOX + 6 + 17 + 6 <= CARD_H, "CARD_H 容不下图片与信息行"
+PUMP_MS = 40              # 消息队列轮询间隔（毫秒）
+assert 8 + IMG_BOX + 6 + 17 + 6 <= CARD_H, "CARD_H 容不下图片与信息行"
 
 
 @dataclass
-class Item:
-    """网格中的一个缓存媒体。"""
+class MediaItem:
+    """网格中的一条**缓存**媒体（对应一个 `Tdata` 文件）。
+
+    与在线挑选器的 ``tg_picker.MediaItem`` 是同一概念、字段不同：
+    这里的数据来自已解密的本地缓存，故只包一层 :class:`cache_source.CacheEntry`。
+    """
 
     entry: cs.CacheEntry
     name: str = ""
@@ -125,14 +131,17 @@ class Item:
 
     @property
     def kind(self) -> str:
+        """媒体类型：``image`` / ``video``。"""
         return self.entry.kind
 
     @property
     def size(self) -> int:
+        """明文大小（字节）；未知时回退到加密文件大小。"""
         return self.entry.size or self.entry.enc_size
 
     @property
     def mtime(self) -> float:
+        """缓存文件的修改时间（用作"拍摄/接收时间"的近似）。"""
         return self.entry.mtime
 
 
@@ -184,45 +193,48 @@ def save_items(items, out_dir: Path, tdata: Path, passcode: str,
     return ok, fail
 
 
-def open_preview(it: Item, tdata: Path, passcode: str,
+def open_preview(it: MediaItem, tdata: Path, passcode: str,
                  reader: cs.CacheReader | None = None) -> Path:
-    """解密到 preview 目录并返回路径（供双击打开）。"""
+    """解密到 preview 目录并返回路径（供双击打开）。
+
+    预览文件只是临时产物，重名时走 unique_path 追加序号，避免覆盖上一次的预览。
+    """
     if reader is None:
         reader = cs.CacheReader(tdata, passcode)
     PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    dest = PREVIEW_DIR / it.name
+    dest = unique_path(PREVIEW_DIR / it.name)
     dest.write_bytes(reader.decrypt(it.entry.cache_path))
     return dest
 
 
 def load_config() -> dict:
-    try:
-        return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    except Exception:
-        return {}
+    """读取本工具的本地配置（路径固定为 cache_config.json）。"""
+    return ui_kit.load_config(CONFIG_PATH)
 
 
 def save_config(data: dict) -> None:
-    try:
-        merged = load_config()
-        merged.update(data)
-        CONFIG_PATH.write_text(json.dumps(merged, ensure_ascii=False, indent=2),
-                               encoding="utf-8")
-    except OSError:
-        pass
+    """把配置合并写回 cache_config.json（失败只告警，不影响运行）。"""
+    ui_kit.save_config(CONFIG_PATH, data)
 
 
 # ---------------------------------------------------------------------------
 # GUI —— Canvas 虚拟化网格
 # ---------------------------------------------------------------------------
-class CacheApp:
+class CacheApp(LangMixin):
+    """缓存挑选器主窗口（Canvas 图元虚拟化网格）。
+
+    语言切换的通用机制继承自 :class:`ui_lang.LangMixin`，本类只补差异部分。
+    """
+
+    _lang_box_style = "Panel.TFrame"     # 语言按钮所在容器的 ttk 样式
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.ui_q: queue.Queue = queue.Queue()
         self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
 
-        self.all_items: list[Item] = []
-        self.items: list[Item] = []
+        self.all_items: list[MediaItem] = []
+        self.items: list[MediaItem] = []
         self.selected: set[str] = set()
         self.columns = 1
         self.last_click: int | None = None
@@ -232,7 +244,7 @@ class CacheApp:
         self.reader: cs.CacheReader | None = None
 
         # 缩略图
-        self.thumb_mem: "OrderedDict[int, ImageTk.PhotoImage]" = OrderedDict()
+        self.thumb_mem: OrderedDict[int, ImageTk.PhotoImage] = OrderedDict()
         self.thumb_pending: set[int] = set()
         self.thumb_failed: set[int] = set()   # 载入失败的项，避免无限重试
         self.photo_queue: queue.Queue = queue.Queue()
@@ -251,13 +263,12 @@ class CacheApp:
         self._suppress = False
         self._refresh_job = None
         self._search_job = None
+        self._pump_job = None
+        self._previewing = False      # 预览解密重入保护
 
-        # i18n：先定语言再建界面（首次绘制即用正确语言）。
-        # _tr_widgets 登记"构建期设定"的静态文案，供切换语言时统一重刷。
+        # i18n：先定语言再建界面（首次绘制即用正确语言）；登记表先建、回调后注册。
         i18n.init()
-        self._tr_widgets: list[tuple[object, str, dict]] = []
-        self._status_fn = None            # 状态栏当前内容的重放函数（None = 即席文本）
-        self._lang_btns: dict[str, ttk.Button] = {}
+        self._init_lang_support()
 
         root.title(_app_title())
         root.geometry("1280x880")
@@ -275,17 +286,17 @@ class CacheApp:
         self._load_config()
         self.update_count()          # 让计数/主按钮/顶栏概览在首次也在正确语言下
 
-        i18n.on_change(self.retranslate)
+        self._enable_lang_support()
 
         self.root.bind("<Control-a>", lambda e: (self.on_select_all(), "break")[1])
         self.root.bind("<Escape>", lambda e: self.on_clear_sel())
-        self.root.after(60, self._pump)
+        self._pump_job = self.root.after(60, self._pump)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         self.root.after(250, self.on_load)
 
     # ------------------------- 界面 -------------------------
     def _build_style(self) -> None:
-        """统一的 ttk 样式。
+        """统一的 ttk 样式（按控件类别拆到下面的小函数，便于定位与修改）。
 
         关键点：clam 主题的输入框描边、滚动条、进度条都由**自绘图片**构成，
         只设 background/foreground 会留下浅色边缘（视觉上像贴了白胶带）。
@@ -296,14 +307,25 @@ class CacheApp:
             st.theme_use("clam")
         except tk.TclError:
             pass
+        self._style_containers(st)
+        self._style_labels(st)
+        self._style_buttons(st)
+        self._style_inputs(st)
+        self._style_checkbuttons(st)
+        self._style_progressbars(st)
+        self._style_scrollbars(st)
 
-        # ---- 容器 ----
+    @staticmethod
+    def _style_containers(st: ttk.Style) -> None:
+        """容器：内容区 / 面板 / 筛选栏 / 分隔线，靠明度差分档。"""
         st.configure("TFrame", background=BG)
         st.configure("Panel.TFrame", background=PANEL)
         st.configure("Bar.TFrame", background=BAR)
         st.configure("Sep.TFrame", background=SEP)
 
-        # ---- 文字三级色阶（不再出现多种杂灰）----
+    @staticmethod
+    def _style_labels(st: ttk.Style) -> None:
+        """文字三级色阶（不再出现多种杂灰）。"""
         st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
         st.configure("Title.TLabel", background=PANEL, foreground=FG,
                      font=(FONT, 12, "bold"))
@@ -315,7 +337,9 @@ class CacheApp:
         # 筛选栏上的文字（背景是 BAR 而非 PANEL）
         st.configure("BarField.TLabel", background=BAR, foreground=SUB, font=(FONT, 9))
 
-        # ---- 按钮：统一高度，压掉 clam 的立体边框 ----
+    @staticmethod
+    def _style_buttons(st: ttk.Style) -> None:
+        """按钮：统一高度，压掉 clam 的立体边框；含主按钮与分段按钮。"""
         st.configure("TButton", font=(FONT, 9), padding=(12, 6),
                      background=BTN, foreground=FG,
                      borderwidth=0, focusthickness=0, relief="flat",
@@ -353,7 +377,8 @@ class CacheApp:
                      bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
         st.map("SegOn.TButton", background=[("active", ACCENT_HOVER)])
 
-        # ---- 输入框：显式压掉浅色描边 ----
+    def _style_inputs(self, st: ttk.Style) -> None:
+        """输入框与下拉框：显式压掉 clam 的浅色描边。"""
         st.configure("TEntry", fieldbackground=FIELD, foreground=FG,
                      insertcolor=FG, borderwidth=1, padding=5, relief="flat",
                      bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
@@ -378,10 +403,14 @@ class CacheApp:
         self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
         self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
 
-        # ---- 复选框 ----
-        # 关键：clam 的 Checkbutton.indicator 用的是
-        # upperbordercolor / lowerbordercolor（不是 bordercolor/lightcolor/darkcolor）
-        # ——之前只设 bordercolor 完全没生效，浅色斜面边框因此留了下来。
+    @staticmethod
+    def _style_checkbuttons(st: ttk.Style) -> None:
+        """复选框（面板底与筛选栏底各一套）。
+
+        关键：clam 的 Checkbutton.indicator 用的是
+        upperbordercolor / lowerbordercolor（不是 bordercolor/lightcolor/darkcolor）
+        ——之前只设 bordercolor 完全没生效，浅色斜面边框因此留了下来。
+        """
         st.configure("TCheckbutton", background=PANEL, foreground=FG,
                      font=(FONT, 9), focusthickness=0, focuscolor=PANEL,
                      indicatorbackground=FIELD, indicatorforeground=ACCENT,
@@ -407,13 +436,17 @@ class CacheApp:
                upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
                lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
 
-        # ---- 进度条：细轨，轨道比背景更暗以便区分 ----
+    @staticmethod
+    def _style_progressbars(st: ttk.Style) -> None:
+        """进度条：细轨，轨道比背景更暗以便区分。"""
         st.configure("Slim.Horizontal.TProgressbar", background=ACCENT,
                      troughcolor="#14141a", borderwidth=0, thickness=6,
                      bordercolor="#14141a", lightcolor=ACCENT, darkcolor=ACCENT)
         st.map("Slim.Horizontal.TProgressbar", background=[("disabled", "#2b2b33")])
 
-        # ---- 滚动条：轨道独立底色 + 深色滑块，压掉 clam 亮箭头 ----
+    @staticmethod
+    def _style_scrollbars(st: ttk.Style) -> None:
+        """滚动条：轨道独立底色 + 深色滑块，压掉 clam 的亮箭头。"""
         st.configure("Vertical.TScrollbar", background="#3d3d47",
                      troughcolor="#15151a", borderwidth=0, arrowsize=12,
                      bordercolor="#15151a",
@@ -430,47 +463,19 @@ class CacheApp:
         """一条 1px 分隔线，用于划分区域。"""
         ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
 
-    # ---------- i18n ----------
-    def _T(self, widget, key: str, **kw):
-        """给控件设置 i18n 文案并登记，切换语言时统一重刷。
+    # ---------- i18n（差异部分；通用机制见 ui_lang.LangMixin）----------
+    def _window_title(self) -> str:
+        return t("app.cache_title")
 
-        只用于**构建期一次性设定**的静态文案；文本由运行时函数拥有的控件
-        （l_count / b_save / l_status 等）改由 retranslate 调用对应函数重算。
+    def _idle_status(self) -> str:
+        return t("cache.status.default", n=self.thumbs_ready)
+
+    def _retranslate_dynamic(self) -> None:
+        """重算缓存挑选器特有的动态文案。
+
+        通用部分（静态登记、状态栏重放、标题、语言按钮）由 LangMixin.retranslate
+        统一处理，这里只补：排序下拉、类型分段按钮、Canvas 角标、计数/概览。
         """
-        widget.configure(text=t(key, **kw))
-        self._tr_widgets.append((widget, key, kw))
-        return widget
-
-    def _build_lang_switch(self, parent) -> None:
-        """语言切换分段按钮（按钮文案固定为 中文/English，不随当前语言变化）。"""
-        box = ttk.Frame(parent, style="Panel.TFrame")
-        box.pack(side="right", padx=(0, 12))
-        for code, label in i18n.available().items():
-            b = ttk.Button(box, text=label, style="Seg.TButton", width=8,
-                           command=lambda c=code: self.on_lang_change(c))
-            b.pack(side="left", padx=(0, 4))
-            self._lang_btns[code] = b
-        self._sync_lang_buttons()
-
-    def _sync_lang_buttons(self) -> None:
-        cur = i18n.get_language()
-        for code, btn in self._lang_btns.items():
-            btn.configure(style="SegOn.TButton" if code == cur else "Seg.TButton")
-
-    def on_lang_change(self, code: str) -> None:
-        """切换语言：触发全局刷新并记忆偏好。"""
-        if code == i18n.get_language():
-            return
-        i18n.set_language(code)
-        i18n.save_language(code)
-
-    def retranslate(self) -> None:
-        """语言切换后重刷本窗口的全部文案（静态登记 + 动态重算）。"""
-        for widget, key, kw in self._tr_widgets:
-            try:
-                widget.configure(text=t(key, **kw))
-            except tk.TclError:
-                pass
         # 排序下拉：先写 values 再回显（readonly 下先 set 会被复位）
         self.cb_sort.configure(values=[t(f"sort.{k}") for k in SORT_KEYS])
         self.cb_sort.set(t(f"sort.{self.v_sort.get()}"))
@@ -480,9 +485,6 @@ class CacheApp:
             if cell.get("tag_txt") is not None:
                 self._canvas_cfg(cell, "tag_txt", text=t("cell.video_tag"))
         self.update_count()                # 计数 + 主按钮 + 顶栏概览
-        self._render_status()
-        self.root.title(_app_title())
-        self._sync_lang_buttons()
 
     def _build_header(self) -> None:
         # padding 左缘与设置区/底栏标签对齐（同为 16）
@@ -688,11 +690,14 @@ class CacheApp:
         self.e_search.delete(0, "end")
         self.on_filter_change()
 
-    def _default_tdata(self) -> str:
+    @staticmethod
+    def _default_tdata() -> str:
         """探测 tdata 默认位置（跨平台，不硬编码盘符）。
 
         顺序：Telegram 官方默认路径 → 便携版常见位置（程序旁 / 各盘根）。
         找不到就返回空字符串，由用户手动选择。
+
+        不依赖实例状态，故为静态方法——这样无 GUI 也能直接测试它。
         """
         cands: list[Path] = []
         if sys.platform == "win32":
@@ -746,12 +751,14 @@ class CacheApp:
 
     # ------------------------- 读取 -------------------------
     def on_browse(self) -> None:
+        """选择 tdata 目录并回填到输入框。"""
         chosen = filedialog.askdirectory(initialdir=self.e_tdata.get() or str(HERE))
         if chosen:
             self.e_tdata.delete(0, "end")
             self.e_tdata.insert(0, chosen)
 
     def on_load(self) -> None:
+        """读取缓存：校验路径后在后台线程解密/索引，完成后经队列回到主线程。"""
         if self.busy:
             return
         tdata = Path(self.e_tdata.get().strip())
@@ -785,6 +792,13 @@ class CacheApp:
         threading.Thread(target=work, daemon=True).start()
 
     def on_reload(self) -> None:
+        """丢弃索引并重新扫描。
+
+        注意：必须先判 busy 再删索引——否则读取过程中点「重新扫描」会把索引
+        删掉却因 on_load 提前返回而不重扫，索引凭空丢失。
+        """
+        if self.busy:
+            return
         try:
             INDEX_PATH.unlink(missing_ok=True)
         except OSError:
@@ -811,6 +825,7 @@ class CacheApp:
 
     # ------------------------- 筛选 -------------------------
     def on_filter_change(self) -> None:
+        """筛选/排序变化后重建视图：清空选中与缩略图缓存并回到顶部。"""
         self.apply_filter_sort()
         self.selected.clear()
         self.thumb_mem.clear()
@@ -823,6 +838,10 @@ class CacheApp:
         self.update_count()
 
     def apply_filter_sort(self) -> None:
+        """按类型、搜索词、排序**内部键**生成当前视图列表 self.items。
+
+        排序只看 SORT_KEYS 里的键，与下拉框显示的语言文案无关。
+        """
         kind = self.v_kind.get()
         if kind == "image":
             items = [it for it in self.all_items if it.kind == "image"]
@@ -1162,7 +1181,7 @@ class CacheApp:
         cell["slot"] = idx
 
     # ------------------------- 缩略图 -------------------------
-    def _thumb_for(self, idx: int, it: Item) -> ImageTk.PhotoImage | None:
+    def _thumb_for(self, idx: int, it: MediaItem) -> ImageTk.PhotoImage | None:
         """取缩略图 PhotoImage。
 
         图片与视频都走后台生成（视频用 ffmpeg 抽首帧）；尚未生成完成的
@@ -1175,15 +1194,15 @@ class CacheApp:
 
         if idx in self.thumb_failed:
             # 确实提不出图：视频显示占位图，图片留空
-            return self._placeholder_for(it) if it.kind == "video" else None
+            return self._video_placeholder() if it.kind == "video" else None
 
         if idx not in self.thumb_pending:
             self._request_thumb(idx, it)
         # 生成中：视频先给占位图（有内容比空着好），图片留空
-        return self._placeholder_for(it) if it.kind == "video" else None
+        return self._video_placeholder() if it.kind == "video" else None
 
-    def _placeholder_for(self, it: Item) -> ImageTk.PhotoImage | None:
-        """视频的灰色占位图（生成中或提帧失败时使用）。"""
+    def _video_placeholder(self) -> ImageTk.PhotoImage | None:
+        """视频的灰色占位图（生成中或提帧失败时使用），只生成一次并复用。"""
         if self.video_ph is None:
             self.video_ph = self._make_video_placeholder()
         return self.video_ph
@@ -1200,7 +1219,7 @@ class CacheApp:
         except Exception:
             return None
 
-    def _request_thumb(self, idx: int, it: Item) -> None:
+    def _request_thumb(self, idx: int, it: MediaItem) -> None:
         """后台线程：优先读磁盘缩略图缓存；缺失则解密媒体并生成。
 
         视频需要整体解密后交给 ffmpeg 抽帧（缓存分片可能不完整，
@@ -1244,10 +1263,10 @@ class CacheApp:
         changed = False
         for _ in range(PHOTO_BATCH_PER_TICK):
             try:
-                item = self.photo_queue.get_nowait()
+                queued = self.photo_queue.get_nowait()
             except queue.Empty:
                 break
-            idx, img, kind = item
+            idx, img, kind = queued
             self.thumb_pending.discard(idx)
             if idx >= len(self.items):
                 continue
@@ -1292,8 +1311,8 @@ class CacheApp:
         row = int(gy // CELL_H)
         if col < 0 or col >= self.columns:
             return None
-        # 落在卡片之间的间隙里不算命中
-        if (gx % CELL_W) > CARD_W or (gy % CELL_H) > CARD_H:
+        # 落在卡片之间的间隙里不算命中（含卡片右下边缘那条像素）
+        if (gx % CELL_W) >= CARD_W or (gy % CELL_H) >= CARD_H:
             return None
         idx = row * self.columns + col
         return idx if 0 <= idx < len(self.items) else None
@@ -1364,28 +1383,42 @@ class CacheApp:
                 self._place_cell(cell, prev, prev % self.columns, prev // self.columns)
         self.set_status("cache.status.default", n=self.thumbs_ready)
 
-    def on_preview(self, it: Item) -> None:
+    def on_preview(self, it: MediaItem) -> None:
+        """双击预览：把选中项解密到 preview 目录并用系统程序打开。
+
+        同一时刻只允许一个预览在解密（连点会造成重复解密与并发写盘）。
+        """
+        if self._previewing:
+            return
+        self._previewing = True
         tdata = Path(self.e_tdata.get().strip())
         passcode = self.e_pass.get()
         self.set_status("cache.status.preview_decrypting", name=it.name)
 
         def work():
+            path = None
+            err = None
             try:
                 path = open_preview(it, tdata, passcode, self.reader)
-                self.ui_q.put(("preview", str(path), None))
             except Exception as exc:
-                self.ui_q.put(("preview", None, f"{exc.__class__.__name__}: {exc}"))
+                err = f"{exc.__class__.__name__}: {exc}"
+            finally:
+                self._previewing = False
+
+            self.ui_q.put(("preview", str(path) if path else None, err))
 
         threading.Thread(target=work, daemon=True).start()
 
     # ------------------------- 选择 -------------------------
     def on_select_all(self) -> None:
+        """选中当前筛选结果里的全部条目（不改变筛选条件）。"""
         for it in self.items:
             self.selected.add(str(it.entry.rel))
         self.update_count()
         self.refresh_view()
 
     def on_invert(self) -> None:
+        """反选：当前筛选结果里已选的取消、未选的选中。"""
         for it in self.items:
             rel = str(it.entry.rel)
             if rel in self.selected:
@@ -1396,6 +1429,7 @@ class CacheApp:
         self.refresh_view()
 
     def on_clear_sel(self) -> None:
+        """清空全部选中项。"""
         self.selected.clear()
         self.update_count()
         self.refresh_view()
@@ -1434,12 +1468,14 @@ class CacheApp:
 
     # ------------------------- 保存 -------------------------
     def on_pick_out(self) -> None:
+        """选择保存目标目录并回填到输入框。"""
         chosen = filedialog.askdirectory(initialdir=self.e_out.get() or str(HERE))
         if chosen:
             self.e_out.delete(0, "end")
             self.e_out.insert(0, chosen)
 
     def on_open_out(self) -> None:
+        """打开输出目录；目录还不存在时给出提示（不主动创建）。"""
         out = self.e_out.get().strip()
         if out and Path(out).is_dir():
             os.startfile(out)
@@ -1447,6 +1483,7 @@ class CacheApp:
             messagebox.showinfo(_app_title(), t("cache.dialog.out_missing"))
 
     def on_save(self) -> None:
+        """保存选中项：二次确认后在后台线程解密写出到输出目录。"""
         if self.busy:
             return
         if not self.selected:
@@ -1487,119 +1524,146 @@ class CacheApp:
                 )
                 self.ui_q.put(("save_done", Path(out), ok, fail))
             except Exception as exc:  # pragma: no cover
+                # 只报错即可：load_error 分支已复位 busy，再补一条 save_done
+                # 会导致「错误框 + 是否打开目录」连弹两个对话框，且用成功文案。
                 self.ui_q.put(("load_error", "cache.dialog.save_failed_title",
                                f"{exc.__class__.__name__}: {exc}"))
-                self.ui_q.put(("save_done", Path(out), 0, len(items)))
 
         threading.Thread(target=work, daemon=True).start()
 
     # ------------------------- 主循环 -------------------------
     def _pump(self) -> None:
+        """定期排空消息队列并推进缩略图加载。
+
+        单条消息处理失败绝不能中断轮询本身——否则 after 链断开，界面会永久假死、
+        busy 卡住、队列持续堆积。
+        """
+        while True:
+            try:
+                msg = self.ui_q.get_nowait()
+            except queue.Empty:
+                break
+            try:
+                self._handle(msg)
+            except Exception:
+                traceback.print_exc()
         try:
-            while True:
-                self._handle(self.ui_q.get_nowait())
-        except queue.Empty:
-            pass
-        if self._drain_photos():
-            self.refresh_view()
-        self.root.after(40, self._pump)
+            if self._drain_photos():
+                self.refresh_view()
+        except Exception:
+            traceback.print_exc()
+        self._pump_job = self.root.after(PUMP_MS, self._pump)
 
     def _handle(self, msg: tuple) -> None:
-        kind = msg[0]
-        if kind == "load_progress":
-            _, i, total, txt = msg
-            self._show_progress((i / total * 100) if total else 0)
-            # 进度文案由 cache_source 生成，每个文件都会刷新，故不走"重放"
-            self.set_status_raw(txt)
-        elif kind == "load_done":
-            _, tdata, entries, stats, passcode, elapsed = msg
-            self.tdata = tdata
-            self.busy = False
-            self.set_busy(False)
-            self._hide_progress()
-            self.all_items = [Item(entry=e) for e in entries]
-            self.reader = cs.CacheReader(tdata, passcode)
-            self.apply_filter_sort()
-            self.refresh_view()
-            self.update_count()          # 同步顶栏概览与计数
-            reused = stats["reused"]
-            self.set_status(
-                "cache.status.load_done",
-                ok=stats["ok"],
-                reused=t("cache.status.reused", n=reused) if reused else "",
-                skipped=stats["skipped"], failed=stats["failed"],
-                elapsed=f"{elapsed:.1f}",
-            )
-            save_config({"tdata": str(tdata)})
-            if not entries:
-                messagebox.showinfo(_app_title(), t("cache.dialog.no_media"))
-        elif kind == "load_error":
-            _, title_key, detail = msg
-            self.busy = False
-            self.set_busy(False)
-            self._hide_progress()
-            messagebox.showerror(_app_title(), f"{t(title_key)}\n\n{detail}")
-            self.set_status_error(title_key, detail)
-        elif kind == "preview":
-            _, path, err = msg
-            if err:
-                messagebox.showerror(_app_title(), t("cache.dialog.preview_failed_body", err=err))
-                self.set_status("cache.status.preview_failed")
-            else:
-                try:
-                    os.startfile(path)
-                    self.set_status("cache.status.preview_done", name=Path(path).name)
-                except Exception as exc:
-                    messagebox.showerror(_app_title(), t("cache.dialog.cannot_open", exc=exc))
-        elif kind == "save_progress":
-            _, d, tot, n = msg
-            self._show_progress((d / tot * 100) if tot else 0)
-            self.set_status("cache.status.saving", done=d, total=tot, name=n)
-        elif kind == "save_done":
-            _, out, ok, fail = msg
-            self.busy = False
-            self.set_busy(False)
-            self._hide_progress()
-            self.set_status("cache.status.save_done", ok=ok, fail=fail)
-            if messagebox.askyesno(_app_title(),
-                                   t("cache.dialog.save_done_ask", ok=ok, fail=fail)):
-                try:
-                    os.startfile(str(out))
-                except Exception as exc:
-                    messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
-            save_config({"out_dir": str(out), "kind": self.v_kind.get(),
-                         "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
+        """按消息类型分发到 ``self._msg_<类型>``；未定义的类型直接忽略。
+
+        消息由后台线程经 ``ui_q`` 投递，统一在这里（主线程）消费。
+        """
+        handler = getattr(self, f"_msg_{msg[0]}", None)
+        if handler is not None:
+            handler(msg)
+
+    def _msg_load_progress(self, msg: tuple) -> None:
+        """索引进度：更新进度条与状态栏。"""
+        _, i, total, txt = msg
+        self._show_progress((i / total * 100) if total else 0)
+        # 进度文案由 cache_source 生成，每个文件都会刷新，故不走"重放"
+        self.set_status_raw(txt)
+
+    def _msg_load_done(self, msg: tuple) -> None:
+        """缓存读取完成：装载条目、刷新视图与计数、记住 tdata 路径。"""
+        _, tdata, entries, stats, passcode, elapsed = msg
+        self.tdata = tdata
+        self.busy = False
+        self.set_busy(False)
+        self._hide_progress()
+        self.all_items = [MediaItem(entry=e) for e in entries]
+        self.reader = cs.CacheReader(tdata, passcode)
+        self.apply_filter_sort()
+        self.refresh_view()
+        self.update_count()          # 同步顶栏概览与计数
+        reused = stats["reused"]
+        self.set_status(
+            "cache.status.load_done",
+            ok=stats["ok"],
+            reused=t("cache.status.reused", n=reused) if reused else "",
+            skipped=stats["skipped"], failed=stats["failed"],
+            elapsed=f"{elapsed:.1f}",
+        )
+        save_config({"tdata": str(tdata)})
+        if not entries:
+            messagebox.showinfo(_app_title(), t("cache.dialog.no_media"))
+
+    def _msg_load_error(self, msg: tuple) -> None:
+        """读取/保存失败：弹错误框并复位忙碌态（标题走语言键）。"""
+        _, title_key, detail = msg
+        self.busy = False
+        self.set_busy(False)
+        self._hide_progress()
+        messagebox.showerror(_app_title(), f"{t(title_key)}\n\n{detail}")
+        self.set_status_error(title_key, detail)
+
+    def _msg_preview(self, msg: tuple) -> None:
+        """预览解密结果：成功则用系统程序打开，失败则报错。"""
+        _, path, err = msg
+        if err:
+            messagebox.showerror(_app_title(), t("cache.dialog.preview_failed_body", err=err))
+            self.set_status("cache.status.preview_failed")
+        else:
+            try:
+                os.startfile(path)
+                self.set_status("cache.status.preview_done", name=Path(path).name)
+            except Exception as exc:
+                messagebox.showerror(_app_title(), t("cache.dialog.cannot_open", exc=exc))
+
+    def _msg_save_progress(self, msg: tuple) -> None:
+        """保存进度：更新进度条与状态栏（状态栏显示当前文件名）。"""
+        _, done, total, name = msg
+        self._show_progress((done / total * 100) if total else 0)
+        self.set_status("cache.status.saving", done=done, total=total, name=name)
+
+    def _msg_save_done(self, msg: tuple) -> None:
+        """保存完成：提示结果、询问是否打开目录、记住本次保存选项。"""
+        _, out, ok, fail = msg
+        self.busy = False
+        self.set_busy(False)
+        self._hide_progress()
+        self.set_status("cache.status.save_done", ok=ok, fail=fail)
+        if messagebox.askyesno(_app_title(),
+                               t("cache.dialog.save_done_ask", ok=ok, fail=fail)):
+            try:
+                os.startfile(str(out))
+            except Exception as exc:
+                messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
+        save_config({"out_dir": str(out), "kind": self.v_kind.get(),
+                     "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
 
     # ------------------------- 状态栏 -------------------------
-    def set_status(self, key: str, **kw) -> None:
-        """设置状态栏文案（记下 key+参数，切换语言时按新语言重放）。"""
-        self._status_fn = (lambda k=key, a=dict(kw): t(k, **a))
-        self.l_status.configure(text=self._status_fn())
-
     def set_status_error(self, key: str, detail: str) -> None:
-        """错误状态：标题也是语言键，切换语言时一并重算。"""
+        """错误状态：标题也是语言键，切换语言时一并重算。
+
+        ``set_status`` / ``set_status_raw`` / ``_render_status`` 由 LangMixin 提供。
+        """
         self._status_fn = (lambda k=key, d=detail: t("cache.status.err", title=t(k), detail=d))
         self.l_status.configure(text=self._status_fn())
 
-    def set_status_raw(self, text: str) -> None:
-        """即席文本（不参与语言重放）。"""
-        self._status_fn = None
-        self.l_status.configure(text=text)
-
-    def _render_status(self) -> None:
-        """按当前语言重放状态栏；无重放内容且空闲时回到默认提示。"""
-        if self._status_fn is not None:
-            self.l_status.configure(text=self._status_fn())
-        elif not self.busy:
-            self.set_status("cache.status.default", n=self.thumbs_ready)
-
     def set_busy(self, busy: bool) -> None:
+        """切换忙碌态：禁用会引发重入的三个按钮。"""
         state = "disabled" if busy else "normal"
         self.b_save.configure(state=state)
         self.b_load.configure(state=state)
         self.b_reload.configure(state=state)
+
     def _on_close(self) -> None:
+        """关闭窗口：停掉后台任务与所有 after 定时任务，避免销毁后回调报错。"""
         self.cancel.set()
+        self._disable_lang_support()
+        for job in (self._pump_job, self._refresh_job, self._search_job):
+            if job is not None:
+                try:
+                    self.root.after_cancel(job)
+                except tk.TclError:
+                    pass
         try:
             self.pool.shutdown(wait=False, cancel_futures=True)
         except Exception:
@@ -1608,6 +1672,7 @@ class CacheApp:
 
 
 def main() -> None:
+    """入口：建窗口并进入 Tk 主循环。"""
     root = tk.Tk()
     CacheApp(root)
     root.mainloop()

@@ -13,6 +13,7 @@
   "common.ready": "Ready",
   "common.cancel": "Cancel",
   "common.submit": "Submit",
+  "common.err_name_conflict": "Too many name conflicts; no free name available for {name}",
 
   "kind.image": "Images",
   "kind.video": "Videos",
@@ -117,6 +118,7 @@
   "online.log.login_failed": "Sign-in failed: {name}: {exc}",
   "online.log.need_chat": "Please enter a group/channel",
   "online.log.invite": "Invite link detected; trying to join…",
+  "online.log.invite_failed": "Joined via the invite link but could not resolve the chat; please try @username or a numeric ID instead.",
   "online.log.need_login": "Please sign in first.",
   "online.log.entity": "Chat resolved: {title}",
   "online.log.scanning": "Scanned {scanned} messages, found {found} media…",
@@ -138,7 +140,6 @@
   "online.log.dl_single_failed": "Download failed: {name}: {exc}",
   "online.log.submit_err": "[{label}] error: {name}: {exc}",
   "online.log.cancel_req": "Cancellation requested…",
-  "online.err_name_conflict": "Too many name conflicts: {path}",
 
   "online.dialog.api_id_num": "api_id must be a number",
   "online.dialog.need_hash_phone": "Please fill in api_hash and phone (with country code, e.g. +8613800000000)",
@@ -157,6 +158,5 @@
   "cs.err_tdata_missing": "tdata folder not found: {tdata}",
   "cs.err_passcode": "This tdata is protected by a local passcode (Telegram Settings → Privacy and Security → Passcode Lock). Enter the passcode and try again.",
   "cs.err_too_large": "File too large, skipped: {name}",
-  "cs.err_name_conflict": "Too many name conflicts; no free name available for {name}",
   "cs.progress_parse": "Parsing cache {i}/{total}"
 }
