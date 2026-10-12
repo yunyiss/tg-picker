@@ -49,6 +49,7 @@ CONFIG_PATH = HERE / "cache_config.json"
 THUMB_DIR = HERE / "cache_thumbs"
 INDEX_PATH = HERE / "cache_index.json"
 PREVIEW_DIR = HERE / "preview"
+VIDEO_TMP_DIR = HERE / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 THUMB = cs.THUMB
 
 # 网格几何
@@ -653,20 +654,30 @@ class CacheApp:
 
     # ------------------------- 缩略图 -------------------------
     def _thumb_for(self, idx: int, it: Item) -> ImageTk.PhotoImage | None:
-        """取缩略图 PhotoImage；没有则请求后台载入并返回 None。"""
+        """取缩略图 PhotoImage。
+
+        图片与视频都走后台生成（视频用 ffmpeg 抽首帧）；尚未生成完成的
+        返回占位图（视频）或 None（图片），后续刷新会自动替换为真实画面。
+        """
         photo = self.thumb_mem.get(idx)
         if photo is not None:
             self.thumb_mem.move_to_end(idx)
             return photo
-        if it.kind == "video":
-            if self.video_ph is None:
-                self.video_ph = self._make_video_placeholder()
-            return self.video_ph
+
         if idx in self.thumb_failed:
-            return None
+            # 确实提不出图：视频显示占位图，图片留空
+            return self._placeholder_for(it) if it.kind == "video" else None
+
         if idx not in self.thumb_pending:
             self._request_thumb(idx, it)
-        return None
+        # 生成中：视频先给占位图（有内容比空着好），图片留空
+        return self._placeholder_for(it) if it.kind == "video" else None
+
+    def _placeholder_for(self, it: Item) -> ImageTk.PhotoImage | None:
+        """视频的灰色占位图（生成中或提帧失败时使用）。"""
+        if self.video_ph is None:
+            self.video_ph = self._make_video_placeholder()
+        return self.video_ph
 
     def _make_video_placeholder(self) -> ImageTk.PhotoImage | None:
         try:
@@ -681,10 +692,16 @@ class CacheApp:
             return None
 
     def _request_thumb(self, idx: int, it: Item) -> None:
-        """后台线程：从磁盘缩略图缓存读取（缺失则解密生成）。"""
+        """后台线程：优先读磁盘缩略图缓存；缺失则解密媒体并生成。
+
+        视频需要整体解密后交给 ffmpeg 抽帧（缓存分片可能不完整，
+        抽帧失败会回退到占位图）。
+        """
         self.thumb_pending.add(idx)
         tp = cs.entry_thumb_path(THUMB_DIR, it.entry.thumb_key) if it.entry.thumb_key else None
         reader = self.reader
+        kind = it.kind
+        cache_path = it.entry.cache_path
 
         def work():
             try:
@@ -693,18 +710,23 @@ class CacheApp:
                     with Image.open(tp) as im:
                         im.load()
                         img = im.convert("RGB")
-                elif it.kind == "image" and reader is not None:
-                    data = reader.decrypt(it.entry.cache_path)
-                    img = cs.make_thumb(data, it.kind)
+                elif reader is not None:
+                    data = reader.decrypt(cache_path)
+                    if kind == "image":
+                        img = cs.make_thumb(data, kind)
+                    else:
+                        # 视频抽帧需落临时文件（MP4 的 moov 常在尾部，
+                        # 管道输入无法 seek），临时文件由 ffmpeg 抽完即删。
+                        img = cs.make_video_thumb(data, temp_dir=VIDEO_TMP_DIR)
                     if img is not None and tp is not None:
                         try:
                             tp.parent.mkdir(parents=True, exist_ok=True)
                             img.save(tp, "JPEG", quality=85)
                         except OSError:
                             pass
-                self.photo_queue.put((idx, img))
+                self.photo_queue.put((idx, img, kind))
             except Exception:
-                self.photo_queue.put((idx, None))
+                self.photo_queue.put((idx, None, kind))
 
         self.pool.submit(work)
 
@@ -713,13 +735,15 @@ class CacheApp:
         changed = False
         for _ in range(PHOTO_BATCH_PER_TICK):
             try:
-                idx, img = self.photo_queue.get_nowait()
+                item = self.photo_queue.get_nowait()
             except queue.Empty:
                 break
+            idx, img, kind = item
             self.thumb_pending.discard(idx)
             if idx >= len(self.items):
                 continue
-            if img is None or self.items[idx].kind != "image":
+            if img is None:
+                # 提取失败：视频仍显示占位图，图片留空
                 self.thumb_failed.add(idx)
                 continue
             try:

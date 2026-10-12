@@ -11,10 +11,11 @@ dist/
 venv/
 env/
 
-# ---- 运行时产物（缩略图缓存、索引、预览临时文件）----
+# ---- 运行时产物（缩略图缓存、索引、预览/抽帧临时文件）----
 cache_thumbs/
 thumbs/
 preview/
+tmp_video/
 cache_index.json
 *.tg-scoop-state.json
 

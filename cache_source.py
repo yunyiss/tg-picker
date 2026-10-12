@@ -21,7 +21,10 @@ import hashlib
 import io
 import json
 import os
+import shutil
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -34,6 +37,104 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 THUMB = 140
 HEAD_BYTES = 64 * 1024          # 索引阶段嗅探时解密的前缀长度
 MAX_DECRYPT_BYTES = 512 * 1024 * 1024
+
+# 视频首帧提取：把解密后的明文通过管道交给 ffmpeg 抽一帧。
+# ffmpeg 由 imageio-ffmpeg 提供（自带静态二进制，无需系统安装）。
+VIDEO_THUMB_TIMEOUT = 30        # 单个视频抽帧超时（秒）
+VIDEO_SEEK = "0.1"              # 抽帧位置：略微避开可能全黑的开头
+
+_FFMPEG_CACHE: str | None = None
+
+
+def ffmpeg_exe() -> str | None:
+    """返回可用的 ffmpeg 路径：优先 imageio-ffmpeg 自带的，其次系统 PATH。
+
+    结果进程内缓存，避免每个视频都重复探测。
+    """
+    global _FFMPEG_CACHE
+    if _FFMPEG_CACHE is not None:
+        return _FFMPEG_CACHE or None
+    exe = ""
+    try:
+        import imageio_ffmpeg
+
+        candidate = imageio_ffmpeg.get_ffmpeg_exe()
+        if candidate and os.path.isfile(candidate):
+            exe = candidate
+    except Exception:
+        exe = ""
+    if not exe:
+        exe = shutil.which("ffmpeg") or ""
+    _FFMPEG_CACHE = exe
+    return exe or None
+
+
+def make_video_thumb(data: bytes, temp_dir: Path | None = None) -> Image.Image | None:
+    """用 ffmpeg 从视频明文抽一帧并缩放，返回缩略图；失败返回 None。
+
+    **必须落临时文件**：MP4 的 moov（索引）常位于文件尾部，而 TDEF 解密后
+    的明文是完整字节流；若改用管道（pipe:0）输入，ffmpeg 无法回退 seek，
+    会报 "partial file / unspecified pixel format" 而抽帧失败。写盘后
+    ffmpeg 可以正常 seek，成功率显著提高。
+
+    临时文件用完立即删除；写入位置优先 temp_dir（便于统一清理），
+    默认用系统临时目录。
+    """
+    exe = ffmpeg_exe()
+    if not exe or not data:
+        return None
+
+    tmp_path: str | None = None
+    try:
+        if temp_dir is not None:
+            try:
+                Path(temp_dir).mkdir(parents=True, exist_ok=True)
+                fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="vid-", dir=str(temp_dir))
+            except OSError:
+                fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="vid-")
+        else:
+            fd, tmp_path = tempfile.mkstemp(suffix=".mp4", prefix="vid-")
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+
+        # 先按偏移抽帧（避开可能全黑的开头），失败再试首帧
+        for seek in (VIDEO_SEEK, None):
+            cmd = [exe, "-loglevel", "error"]
+            if seek is not None:
+                cmd += ["-ss", seek]
+            cmd += [
+                "-i", tmp_path,
+                "-frames:v", "1",
+                "-vf", f"scale={THUMB * 2}:-2:flags=bilinear",
+                "-f", "image2pipe",
+                "-vcodec", "mjpeg",
+                "pipe:1",
+            ]
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                    timeout=VIDEO_THUMB_TIMEOUT,
+                )
+            except (OSError, subprocess.SubprocessError):
+                continue
+            if proc.returncode != 0 or not proc.stdout:
+                continue
+            try:
+                with Image.open(io.BytesIO(proc.stdout)) as im:
+                    im = im.convert("RGB")
+                    im.thumbnail((THUMB, THUMB), Image.LANCZOS)
+                    return im
+            except Exception:
+                continue
+        return None
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
 
 
 class CacheError(RuntimeError):
