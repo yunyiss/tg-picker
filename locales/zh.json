@@ -5,7 +5,6 @@
   "lang.label": "语言",
 
   "common.browse": "浏览…",
-  "common.open_dir": "打开目录",
   "common.select_all": "全选",
   "common.invert": "反选",
   "common.clear": "清除",
@@ -35,6 +34,7 @@
   "cache.setup.hint": "没设过就留空　·　原 tdata 只读，不会被改动",
   "cache.setup.load_btn": "读取缓存",
   "cache.setup.rescan_btn": "重新扫描",
+  "cache.setup.clean_btn": "清理缓存",
 
   "cache.toolbar.kind_label": "类型",
   "cache.toolbar.sort_label": "排序",
@@ -54,7 +54,9 @@
   "cache.status.reused": "（复用 {n}）",
   "cache.status.hover": "{name}　·　{size}　·　{time}　·　来源 {label}",
   "cache.status.header": "{kind} {shown} / 共 {total}",
-  "cache.status.exporting": "正在导出 {name} …",
+  "cache.dialog.clean_nothing": "没有可清理的缓存。",
+  "cache.dialog.confirm_clean": "将删除本地缓存（缩略图、索引、抽帧临时文件，约 {size}），下次会自动重建。\n\n确定清理吗？",
+  "cache.status.cleaned": "已清理缓存：释放 {size}",
   "cache.status.export_done": "已导出：{path}",
   "cache.status.export_failed": "导出失败",
   "cache.status.saving": "保存中 {done}/{total} · {name}",
@@ -68,14 +70,10 @@
   "cache.dialog.no_media": "没有解析出可用的媒体。\n\n请先在 Telegram Desktop 里查看/播放你想保存的内容，再回来点“重新扫描”。",
   "cache.dialog.export_failed": "导出失败：{err}",
   "cache.dialog.confirm_export": "是否把这一条导出到下面这个目录？\n\n{out}\n\n文件名：{name}",
-  "cache.dialog.open_failed": "打开失败：{exc}",
-  "cache.dialog.open_unsupported": "系统默认程序没能打开这个文件（可能没有关联程序，或该程序启动失败）：{name}",
-  "cache.dialog.out_missing": "输出目录还不存在，保存后会自动创建",
   "cache.dialog.nothing_selected": "还没有选中任何内容\n\n在缩略图上单击即可选中（变蓝打勾）",
   "cache.dialog.no_out_dir": "请先选择保存到的目录",
   "cache.dialog.confirm_save": "将保存 {n} 个文件（约 {size}）到：\n{out}\n\n{by_date}原 tdata 缓存不会被改动。",
   "cache.dialog.confirm_save_bydate": "（按日期分文件夹）\n",
-  "cache.dialog.save_done_ask": "保存完成：成功 {ok}，失败 {fail}。\n\n是否打开输出目录？",
 
   "online.login.title": "① 登录（首次需在 my.telegram.org 申请 api_id / api_hash）",
   "online.login.api_id": "api_id",
@@ -102,11 +100,9 @@
 
   "online.status.loaded": "加载 {n} 个媒体，缩略图生成中…",
   "online.status.thumbs": "缩略图 {done}/{total}",
-  "online.status.ready_hint": "就绪：单击选中，双击下载并打开，然后点「下载选中」",
+  "online.status.ready_hint": "就绪：单击选中，双击下载原件，然后点「下载选中」",
   "online.status.downloading": "下载中 {done}/{total}",
   "online.status.done": "完成：成功 {ok}，失败 {fail}",
-  "online.status.open_dir_failed": "打开目录失败：{exc}",
-  "online.status.open_file_failed": "打开文件失败：{exc}",
 
   "online.log.connecting": "正在连接 Telegram（api_id={api_id}）…",
   "online.log.requesting_code": "该会话尚未登录，正在请求验证码…",
@@ -146,7 +142,6 @@
   "online.dialog.need_hash_phone": "请填写 api_hash 和手机号（含国家码，如 +8613800000000）",
   "online.dialog.need_kind": "请至少勾选一种类型",
   "online.dialog.nothing_selected": "还没有选中任何文件（在缩略图上单击即可选中）",
-  "online.dialog.done_ask": "下载完成：成功 {ok}，失败 {fail}。\n\n是否打开输出目录？",
 
   "online.task.default": "任务",
   "online.task.login": "登录",

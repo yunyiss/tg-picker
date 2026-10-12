@@ -5,7 +5,6 @@
   "lang.label": "Language",
 
   "common.browse": "Browse…",
-  "common.open_dir": "Open folder",
   "common.select_all": "Select all",
   "common.invert": "Invert",
   "common.clear": "Clear",
@@ -35,6 +34,7 @@
   "cache.setup.hint": "Leave empty if unset · source tdata is read-only",
   "cache.setup.load_btn": "Load cache",
   "cache.setup.rescan_btn": "Rescan",
+  "cache.setup.clean_btn": "Clear cache",
 
   "cache.toolbar.kind_label": "Type",
   "cache.toolbar.sort_label": "Sort",
@@ -54,7 +54,9 @@
   "cache.status.reused": " ({n} reused)",
   "cache.status.hover": "{name} · {size} · {time} · from {label}",
   "cache.status.header": "{kind} {shown} of {total}",
-  "cache.status.exporting": "Exporting {name}…",
+  "cache.dialog.clean_nothing": "There is no cache to clear.",
+  "cache.dialog.confirm_clean": "This deletes the local cache (thumbnails, index, frame temp files — about {size}); it will be rebuilt automatically.\n\nContinue?",
+  "cache.status.cleaned": "Cache cleared: {size} freed",
   "cache.status.export_done": "Exported: {path}",
   "cache.status.export_failed": "Export failed",
   "cache.status.saving": "Saving {done}/{total} · {name}",
@@ -68,14 +70,10 @@
   "cache.dialog.no_media": "No usable media could be decoded.\n\nOpen or play the content you want in Telegram Desktop first, then click \"Rescan\".",
   "cache.dialog.export_failed": "Export failed: {err}",
   "cache.dialog.confirm_export": "Export this item to the folder below?\n\n{out}\n\nFile name: {name}",
-  "cache.dialog.open_failed": "Failed to open: {exc}",
-  "cache.dialog.open_unsupported": "The system's default app could not open this file (no program may be associated with this type, or it failed to start): {name}",
-  "cache.dialog.out_missing": "The output folder does not exist yet; it will be created when you save.",
   "cache.dialog.nothing_selected": "Nothing is selected yet.\n\nClick a thumbnail to select it (it turns blue with a check).",
   "cache.dialog.no_out_dir": "Please choose an output folder first.",
   "cache.dialog.confirm_save": "Save {n} file(s) (~{size}) to:\n{out}\n\n{by_date}The original tdata cache will not be modified.",
   "cache.dialog.confirm_save_bydate": "(Split into date subfolders)\n",
-  "cache.dialog.save_done_ask": "Saved: {ok} succeeded, {fail} failed.\n\nOpen the output folder?",
 
   "online.login.title": "① Sign in (get api_id / api_hash from my.telegram.org first)",
   "online.login.api_id": "api_id",
@@ -102,11 +100,9 @@
 
   "online.status.loaded": "Loaded {n} media, generating thumbnails…",
   "online.status.thumbs": "Thumbnails {done}/{total}",
-  "online.status.ready_hint": "Ready: click to select, double-click to download and open, then click \"Download selected\"",
+  "online.status.ready_hint": "Ready: click to select, double-click to download the original, then click \"Download selected\"",
   "online.status.downloading": "Downloading {done}/{total}",
   "online.status.done": "Done: {ok} succeeded, {fail} failed",
-  "online.status.open_dir_failed": "Failed to open folder: {exc}",
-  "online.status.open_file_failed": "Failed to open file: {exc}",
 
   "online.log.connecting": "Connecting to Telegram (api_id={api_id})…",
   "online.log.requesting_code": "This session is not signed in; requesting a login code…",
@@ -146,7 +142,6 @@
   "online.dialog.need_hash_phone": "Please fill in api_hash and phone (with country code, e.g. +8613800000000)",
   "online.dialog.need_kind": "Please select at least one type",
   "online.dialog.nothing_selected": "Nothing is selected yet (click a thumbnail to select).",
-  "online.dialog.done_ask": "Download finished: {ok} succeeded, {fail} failed.\n\nOpen the output folder?",
 
   "online.task.default": "Task",
   "online.task.login": "Sign in",

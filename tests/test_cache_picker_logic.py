@@ -103,6 +103,27 @@ def test_export_one_decrypts_to_file(tdata_dir: Path, tmp_path: Path):
     assert dest.exists(), "原文件不应被覆盖"
 
 
+def test_clean_cache_removes_only_cache_artifacts(tmp_path, monkeypatch):
+    """清理缓存：删掉缩略图/索引/抽帧目录并返回释放空间，且不碰用户导出的媒体。"""
+    thumb = tmp_path / "thumbs"
+    (thumb / "ab").mkdir(parents=True)
+    (thumb / "ab" / "x.jpg").write_bytes(b"a" * 100)
+    index = tmp_path / "idx.json"
+    index.write_bytes(b"b" * 50)
+    video = tmp_path / "tmp_video"
+    video.mkdir()
+    (video / "t.mp4").write_bytes(b"c" * 10)
+    keep = tmp_path / "picked"                      # 用户导出的媒体
+    keep.mkdir()
+    (keep / "keep.jpg").write_bytes(b"d" * 999)
+
+    monkeypatch.setattr(cp, "cache_artifacts", lambda: [thumb, index, video])
+    assert cp.cache_bytes() == 160
+    assert cp.clean_cache() == 160
+    assert not thumb.exists() and not index.exists() and not video.exists()
+    assert keep.exists() and (keep / "keep.jpg").exists(), "用户导出的媒体绝不能被清掉"
+
+
 def test_index_reuse_is_high(tdata_dir: Path):
     """第二次读取应几乎全部复用索引（缓存索引的意义所在）。
 

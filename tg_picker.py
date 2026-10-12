@@ -529,15 +529,13 @@ class Worker:
         finally:
             self.post("busy", False)
 
-    async def download_single(self, it: MediaItem, out_dir: Path, open_after: bool = True) -> None:
-        """双击预览：下载原图并调用系统默认程序打开。"""
+    async def download_single(self, it: MediaItem, out_dir: Path) -> None:
+        """双击预览：把这一条原件下载到输出目录。"""
         try:
             out_dir = Path(out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             path = await self._download_one(it, out_dir)
             self.post("log", t("online.log.downloaded", path=path))
-            if open_after:
-                self.post("open_file", str(path))
         except Exception as exc:
             self.post("log", t("online.log.dl_single_failed",
                                name=exc.__class__.__name__, exc=exc))
@@ -949,7 +947,7 @@ class App(LangMixin):
         self.update_button()
 
     def preview_item(self, it: MediaItem) -> None:
-        """双击：下载该原件并打开。"""
+        """双击：下载该原件。"""
         out = self.e_out.get().strip() or str(DEFAULT_OUT)
         self.set_busy(True)
         self.worker.submit(self.worker.download_single(it, Path(out)),
@@ -1084,25 +1082,10 @@ class App(LangMixin):
         self.set_status("online.status.downloading", done=done, total=total)
 
     def _msg_download_done(self, msg: tuple) -> None:
-        """下载完成：提示结果并询问是否打开输出目录。"""
-        _, out, ok, fail = msg
+        """下载完成：提示结果。"""
+        _, _out, ok, fail = msg
         self.pb.configure(value=100)
         self.set_status("online.status.done", ok=ok, fail=fail)
-        if messagebox.askyesno(_app_title(), t("online.dialog.done_ask", ok=ok, fail=fail)):
-            try:
-                ui_kit.open_path(out)          # 隔离在子进程里打开（见 ui_kit.open_path）
-            except Exception as exc:
-                self.log(t("online.status.open_dir_failed", exc=exc))
-
-    def _msg_open_file(self, msg: tuple) -> None:
-        """用系统默认程序打开刚下载的文件（双击预览时用）。
-
-        同样隔离在子进程里：某些机器的 shell 会让 ShellExecute 崩掉调用进程。
-        """
-        try:
-            ui_kit.open_path(msg[1])
-        except Exception as exc:
-            self.log(t("online.status.open_file_failed", exc=exc))
 
     # ---------- 小工具 ----------
     def log(self, text: str) -> None:

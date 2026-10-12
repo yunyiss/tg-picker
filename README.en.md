@@ -104,8 +104,7 @@ bulk-export with another tool first.
    - **Click** to select (turns blue with a check); click again to deselect
    - **Shift + click** to select a range
    - **Double-click** to **export** that item into the "Save to" folder (it asks for
-     confirmation first; the path then appears in the status bar — use "Open folder" to
-     go look at it)
+     confirmation first; the full path then appears in the status bar)
    - **Ctrl+A** selects all current results / **Esc** clears the selection
 5. Choose the **Save to** folder (you can tick **Split by date**) → click **Save selected**
 
@@ -126,6 +125,9 @@ bulk-export with another tool first.
   in-progress writes are not read
 - If cache files grow or shrink, click **Rescan** (it discards the index and decrypts
   everything again)
+- When the thumbnail cache grows too large, click **Clear cache**: it deletes only the
+  thumbnails, index and frame temp files (and reports how much was freed); they are
+  rebuilt automatically. **Your tdata and any media you exported are untouched.**
 
 ---
 

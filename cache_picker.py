@@ -18,6 +18,7 @@ from __future__ import annotations
 import concurrent.futures
 import os
 import queue
+import shutil
 import sys
 import threading
 import time
@@ -85,9 +86,7 @@ ACCENT = "#3b82f6"        # 强调色
 ACCENT_HOVER = "#4b8ef7"
 ACCENT_DIM = "#2b4a77"    # 强调色的弱化版（次级选中态）
 FIELD = "#31313a"         # 输入框底色（比面板亮，保证"看得出是输入框"）
-FIELD_HOVER = "#35353f"
 BORDER = "#4a4c53"        # 输入框描边（对 FIELD 约 2.1:1，可见但不刺眼）
-BORDER_FOCUS = ACCENT
 BTN = "#2e2e36"           # 次级按钮底色
 FG = "#e8e8ec"            # 一级文字
 SUB = "#9aa0a8"           # 二级文字
@@ -204,6 +203,44 @@ def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
     except OSError:
         pass
     return dest
+
+
+def cache_artifacts() -> list[Path]:
+    """本工具产生的、**可安全删除且会自动重建**的缓存路径。
+
+    只包含缩略图缓存、索引、抽帧临时目录——用户自己保存出来的媒体绝不在此列。
+    """
+    return [THUMB_DIR, INDEX_PATH, VIDEO_TMP_DIR]
+
+
+def cache_bytes(paths: list[Path] | None = None) -> int:
+    """统计上述缓存占用的字节数（目录递归累加）。"""
+    total = 0
+    for p in (cache_artifacts() if paths is None else paths):
+        p = Path(p)
+        try:
+            if p.is_dir():
+                total += sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
+            elif p.is_file():
+                total += p.stat().st_size
+        except OSError:
+            continue
+    return total
+
+
+def clean_cache() -> int:
+    """删除缓存并返回释放的字节数；单个路径删失败不影响其它。"""
+    freed = cache_bytes()
+    for p in cache_artifacts():
+        p = Path(p)
+        try:
+            if p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+            elif p.is_file():
+                p.unlink()
+        except OSError:
+            continue
+    return freed
 
 
 def load_config() -> dict:
@@ -524,6 +561,9 @@ class CacheApp(LangMixin):
         self.b_reload = self._T(ttk.Button(r2, command=self.on_reload),
                                 "cache.setup.rescan_btn")
         self.b_reload.pack(side="left")
+        self.b_clean = self._T(ttk.Button(r2, command=self.on_clean_cache),
+                               "cache.setup.clean_btn")
+        self.b_clean.pack(side="left", padx=(8, 0))
         self._T(ttk.Label(r2, style="Hint.TLabel"), "cache.setup.hint").pack(
             side="left", padx=(12, 0))
         self._divider()
@@ -626,7 +666,6 @@ class CacheApp(LangMixin):
         self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
         self._T(ttk.Button(r2, command=self.on_pick_out), "common.browse").pack(
             side="left", padx=(0, 8))
-        self._T(ttk.Button(r2, command=self.on_open_out), "common.open_dir").pack(side="left")
         self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
                                  command=self.on_save)
         self.b_save.pack(side="left", padx=(12, 0))
@@ -803,6 +842,36 @@ class CacheApp(LangMixin):
         except OSError:
             pass
         self.on_load()
+
+    def on_clean_cache(self) -> None:
+        """清理本地缓存（缩略图 / 索引 / 抽帧临时文件），回收磁盘空间。
+
+        只删这些**会自动重建**的产物，绝不碰 tdata、也不碰你保存出来的媒体。
+        清理后当前视图的缩略图会按需重新生成，所以只作废内存缓存、不清空已读到的数据。
+        """
+        if self.busy:
+            return
+        size = cache_bytes()
+        if size <= 0:
+            messagebox.showinfo(_app_title(), t("cache.dialog.clean_nothing"))
+            return
+        if not messagebox.askyesno(
+            _app_title(), t("cache.dialog.confirm_clean", size=human_size(size))
+        ):
+            return
+        freed = clean_cache()
+        # 顺序很关键：先隐藏图元（解除 Canvas 对 Tk 图像的引用）再丢弃内存缩略图，
+        # 反了会留下悬空引用，之后 itemconfigure 会持续报 image doesn't exist。
+        for cell in self.cell_pool:
+            self._hide_cell(cell)
+        self.cells_by_slot.clear()
+        self.thumb_mem.clear()
+        self.thumb_pending.clear()
+        self.thumb_failed.clear()
+        self.thumbs_ready = 0
+        self._text_w_cache.clear()
+        self.refresh_view()          # 可见区按需重新生成缩略图
+        self.set_status("cache.status.cleaned", size=human_size(freed))
 
     def _reset_grid_data(self) -> None:
         """清空网格与缩略图内存（不删磁盘缓存）。"""
@@ -1385,9 +1454,9 @@ class CacheApp(LangMixin):
     def export_item(self, it: MediaItem) -> None:
         """双击：询问确认后把这一条**导出**到「保存到」目录。
 
-        刻意不再调用系统默认程序打开文件：实测某些机器的 shell 环境会让
-        ShellExecute 以 0xC0000409 崩掉进程或长时间卡住（见 ui_kit.open_path）。
-        导出完成后只在状态栏给出完整路径——要看图/播放，用底栏的「打开目录」。
+        刻意不调用系统默认程序打开文件：实测某些机器的 shell 环境会让
+        ShellExecute 崩溃或长时间卡住（见 CHANGELOG）。导出完成后只在状态栏
+        给出完整路径，自行到该目录查看即可。
 
         同一时刻只允许一个导出在跑（连点会造成重复解密与并发写盘）。
         """
@@ -1485,14 +1554,6 @@ class CacheApp(LangMixin):
             self.e_out.delete(0, "end")
             self.e_out.insert(0, chosen)
 
-    def on_open_out(self) -> None:
-        """打开输出目录；目录还不存在时给出提示（不主动创建）。"""
-        out = self.e_out.get().strip()
-        if out and Path(out).is_dir():
-            self._open_detached(out)
-        else:
-            messagebox.showinfo(_app_title(), t("cache.dialog.out_missing"))
-
     def on_save(self) -> None:
         """保存选中项：二次确认后在后台线程解密写出到输出目录。"""
         if self.busy:
@@ -1536,7 +1597,7 @@ class CacheApp(LangMixin):
                 self.ui_q.put(("save_done", Path(out), ok, fail))
             except Exception as exc:  # pragma: no cover
                 # 只报错即可：load_error 分支已复位 busy，再补一条 save_done
-                # 会导致「错误框 + 是否打开目录」连弹两个对话框，且用成功文案。
+                # 会导致连弹两个对话框（且后者用成功文案）。
                 self.ui_q.put(("load_error", "cache.dialog.save_failed_title",
                                f"{exc.__class__.__name__}: {exc}"))
 
@@ -1630,48 +1691,14 @@ class CacheApp(LangMixin):
         self.set_status("cache.status.saving", done=done, total=total, name=name)
 
     def _msg_save_done(self, msg: tuple) -> None:
-        """保存完成：提示结果、询问是否打开目录、记住本次保存选项。"""
+        """保存完成：提示结果并记住本次保存选项。"""
         _, out, ok, fail = msg
         self.busy = False
         self.set_busy(False)
         self._hide_progress()
         self.set_status("cache.status.save_done", ok=ok, fail=fail)
-        if messagebox.askyesno(_app_title(),
-                               t("cache.dialog.save_done_ask", ok=ok, fail=fail)):
-            self._open_detached(str(out))
         save_config({"out_dir": str(out), "kind": self.v_kind.get(),
                      "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
-
-    def _msg_open_failed(self, msg: tuple) -> None:
-        """系统默认程序没能打开文件（一般是该类型没有关联程序）。"""
-        _, path, _rc = msg
-        messagebox.showwarning(_app_title(),
-                               t("cache.dialog.open_unsupported", name=Path(path).name))
-
-    def _open_detached(self, path: str) -> None:
-        """用系统默认程序打开文件/目录。
-
-        启动被隔离在一次性子进程里（见 :func:`ui_kit.open_path`）：实测某些机器的
-        shell 环境会让 ShellExecute 以 0xC0000409 直接崩掉**调用进程**、或长时间卡住
-        （卡住时 Tk 主线程会一直“无响应”）。隔离后界面不再受影响。
-
-        这里不阻塞等待，只在后台线程里看一眼「是否立刻就失败了」，失败则回报界面。
-        """
-        try:
-            proc = ui_kit.open_path(path)
-        except Exception as exc:
-            messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
-            return
-
-        def watch() -> None:
-            try:
-                rc = proc.wait(timeout=5)
-            except Exception:
-                return               # 5 秒仍未退出 = 程序正常打开了，无需关心
-            if rc:
-                self.ui_q.put(("open_failed", path, rc))
-
-        threading.Thread(target=watch, daemon=True).start()
 
     # ------------------------- 状态栏 -------------------------
     def set_status_error(self, key: str, detail: str) -> None:
@@ -1683,11 +1710,12 @@ class CacheApp(LangMixin):
         self.l_status.configure(text=self._status_fn())
 
     def set_busy(self, busy: bool) -> None:
-        """切换忙碌态：禁用会引发重入的三个按钮。"""
+        """切换忙碌态：禁用会引发重入的几个按钮。"""
         state = "disabled" if busy else "normal"
         self.b_save.configure(state=state)
         self.b_load.configure(state=state)
         self.b_reload.configure(state=state)
+        self.b_clean.configure(state=state)
 
     def _on_close(self) -> None:
         """关闭窗口：停掉后台任务与所有 after 定时任务，避免销毁后回调报错。"""

@@ -13,7 +13,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -46,43 +45,6 @@ def unique_path(path: Path) -> Path:
         if not cand.exists():
             return cand
     raise RuntimeError(t("common.err_name_conflict", name=path.name))
-
-
-def open_path(path: str | Path) -> subprocess.Popen:
-    """用系统默认程序打开文件或目录 —— **在独立的一次性子进程里执行**。
-
-    为什么不在本进程里直接 ``os.startfile``：
-
-    - 实测在某些机器的 shell 环境下，这一调用会以 ``ucrtbase.dll`` 的
-      ``__fastfail``（异常码 0xC0000409）**直接终止整个进程**（第三方 shell 扩展 /
-      杀软钩子 / Store 应用激活），Python 侧捕获不到，也不会有 traceback；
-    - 它还是**同步**调用，ShellExecute 被拖住时 Tk 主线程会一直“无响应”。
-
-    隔离到子进程后，崩溃与卡顿都不会波及界面。返回 ``Popen``，调用方若要判断
-    “到底起来了没有”，可在**后台线程**里 ``wait(timeout=...)``，切勿阻塞界面。
-    """
-    target = str(path)
-    # 子进程里再决定用哪种方式打开（与主进程同样的平台判断）
-    code = (
-        "import os,subprocess,sys\n"
-        "p = sys.argv[1]\n"
-        "if sys.platform == 'win32':\n"
-        "    os.startfile(p)\n"
-        "elif sys.platform == 'darwin':\n"
-        "    subprocess.run(['open', p])\n"
-        "else:\n"
-        "    subprocess.run(['xdg-open', p])\n"
-    )
-    kwargs: dict = {}
-    if sys.platform == "win32":
-        # 不能弹控制台窗口：GUI 由 pythonw 启动，子进程若继承控制台会闪出黑窗
-        kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
-        if hasattr(subprocess, "STARTUPINFO"):
-            si = subprocess.STARTUPINFO()
-            si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            si.wShowWindow = subprocess.SW_HIDE
-            kwargs["startupinfo"] = si
-    return subprocess.Popen([sys.executable, "-c", code, target], **kwargs)
 
 
 def load_config(path: Path) -> dict:
