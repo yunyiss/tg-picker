@@ -103,7 +103,9 @@ bulk-export with another tool first.
 4. Pick from the thumbnail wall:
    - **Click** to select (turns blue with a check); click again to deselect
    - **Shift + click** to select a range
-   - **Double-click** to decrypt and preview (opens in your system image viewer)
+   - **Double-click** to **export** that item into the "Save to" folder (it asks for
+     confirmation first; the path then appears in the status bar — use "Open folder" to
+     go look at it)
    - **Ctrl+A** selects all current results / **Esc** clears the selection
 5. Choose the **Save to** folder (you can tick **Split by date**) → click **Save selected**
 
@@ -193,7 +195,6 @@ never scrolled past in the client).
 |---|---|
 | `cache_thumbs/` | Thumbnail cache (safe to delete; rebuilt automatically) |
 | `cache_index.json` | Cache index (deleting it forces a full re-decrypt) |
-| `preview/` | Temporary files for double-click previews (safe to delete) |
 | `tmp_video/` | Temporary directory for video frame extraction (cleaned up automatically) |
 | `cache_config.json` | Remembers the last paths and preferences |
 | `language.json` | Language preference (shared by both tools) |

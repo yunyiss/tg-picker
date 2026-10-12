@@ -1090,14 +1090,17 @@ class App(LangMixin):
         self.set_status("online.status.done", ok=ok, fail=fail)
         if messagebox.askyesno(_app_title(), t("online.dialog.done_ask", ok=ok, fail=fail)):
             try:
-                os.startfile(str(out))
+                ui_kit.open_path(out)          # 隔离在子进程里打开（见 ui_kit.open_path）
             except Exception as exc:
                 self.log(t("online.status.open_dir_failed", exc=exc))
 
     def _msg_open_file(self, msg: tuple) -> None:
-        """用系统默认程序打开刚下载的文件（双击预览时用）。"""
+        """用系统默认程序打开刚下载的文件（双击预览时用）。
+
+        同样隔离在子进程里：某些机器的 shell 会让 ShellExecute 崩掉调用进程。
+        """
         try:
-            os.startfile(msg[1])
+            ui_kit.open_path(msg[1])
         except Exception as exc:
             self.log(t("online.status.open_file_failed", exc=exc))
 

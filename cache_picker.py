@@ -42,7 +42,6 @@ HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "cache_config.json"
 THUMB_DIR = HERE / "cache_thumbs"
 INDEX_PATH = HERE / "cache_index.json"
-PREVIEW_DIR = HERE / "preview"
 VIDEO_TMP_DIR = HERE / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 THUMB = cs.THUMB
 
@@ -174,17 +173,7 @@ def save_items(items, out_dir: Path, tdata: Path, passcode: str,
         if cancel_event is not None and cancel_event.is_set():
             break
         try:
-            data = reader.decrypt(it.entry.cache_path)
-            target_dir = out_dir
-            if by_date:
-                target_dir = out_dir / datetime.fromtimestamp(it.mtime).strftime("%Y-%m-%d")
-                target_dir.mkdir(parents=True, exist_ok=True)
-            dest = unique_path(target_dir / it.name)
-            dest.write_bytes(data)
-            try:
-                os.utime(dest, (it.mtime, it.mtime))
-            except OSError:
-                pass
+            export_one(it, out_dir, tdata, passcode, by_date=by_date, reader=reader)
             ok += 1
         except Exception:
             fail += 1
@@ -193,17 +182,27 @@ def save_items(items, out_dir: Path, tdata: Path, passcode: str,
     return ok, fail
 
 
-def open_preview(it: MediaItem, tdata: Path, passcode: str,
-                 reader: cs.CacheReader | None = None) -> Path:
-    """解密到 preview 目录并返回路径（供双击打开）。
+def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
+               by_date: bool = False, reader: cs.CacheReader | None = None) -> Path:
+    """把一条缓存媒体解密并导出到 ``out_dir``，返回落盘路径。
 
-    预览文件只是临时产物，重名时走 unique_path 追加序号，避免覆盖上一次的预览。
+    重名时走 :func:`unique_path` 追加序号，绝不覆盖已有文件；落盘后把时间戳
+    对齐到缓存文件的修改时间，方便按日期整理。``by_date=True`` 时再按
+    ``YYYY-MM-DD`` 分子目录（与「保存选中」同一套规则）。
     """
+    out_dir = Path(out_dir)
+    target_dir = out_dir
+    if by_date:
+        target_dir = out_dir / datetime.fromtimestamp(it.mtime).strftime("%Y-%m-%d")
+    target_dir.mkdir(parents=True, exist_ok=True)
     if reader is None:
         reader = cs.CacheReader(tdata, passcode)
-    PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
-    dest = unique_path(PREVIEW_DIR / it.name)
+    dest = unique_path(target_dir / it.name)
     dest.write_bytes(reader.decrypt(it.entry.cache_path))
+    try:
+        os.utime(dest, (it.mtime, it.mtime))
+    except OSError:
+        pass
     return dest
 
 
@@ -264,7 +263,7 @@ class CacheApp(LangMixin):
         self._refresh_job = None
         self._search_job = None
         self._pump_job = None
-        self._previewing = False      # 预览解密重入保护
+        self._exporting = False       # 单条导出的重入保护
 
         # i18n：先定语言再建界面（首次绘制即用正确语言）；登记表先建、回调后注册。
         i18n.init()
@@ -1346,7 +1345,7 @@ class CacheApp(LangMixin):
         idx = self._slot_at(event.x, event.y)
         if idx is None:
             return
-        self.on_preview(self.items[idx])
+        self.export_item(self.items[idx])
 
     def _on_motion(self, event) -> None:
         idx = self._slot_at(event.x, event.y)
@@ -1383,29 +1382,41 @@ class CacheApp(LangMixin):
                 self._place_cell(cell, prev, prev % self.columns, prev // self.columns)
         self.set_status("cache.status.default", n=self.thumbs_ready)
 
-    def on_preview(self, it: MediaItem) -> None:
-        """双击预览：把选中项解密到 preview 目录并用系统程序打开。
+    def export_item(self, it: MediaItem) -> None:
+        """双击：询问确认后把这一条**导出**到「保存到」目录。
 
-        同一时刻只允许一个预览在解密（连点会造成重复解密与并发写盘）。
+        刻意不再调用系统默认程序打开文件：实测某些机器的 shell 环境会让
+        ShellExecute 以 0xC0000409 崩掉进程或长时间卡住（见 ui_kit.open_path）。
+        导出完成后只在状态栏给出完整路径——要看图/播放，用底栏的「打开目录」。
+
+        同一时刻只允许一个导出在跑（连点会造成重复解密与并发写盘）。
         """
-        if self._previewing:
+        if self._exporting:
             return
-        self._previewing = True
+        out = self.e_out.get().strip()
+        if not out:
+            messagebox.showwarning(_app_title(), t("cache.dialog.no_out_dir"))
+            return
+        if not messagebox.askyesno(
+            _app_title(), t("cache.dialog.confirm_export", out=out, name=it.name)
+        ):
+            return
+        self._exporting = True
         tdata = Path(self.e_tdata.get().strip())
         passcode = self.e_pass.get()
-        self.set_status("cache.status.preview_decrypting", name=it.name)
+        self.set_status("cache.status.exporting", name=it.name)
 
         def work():
-            path = None
+            dest = None
             err = None
             try:
-                path = open_preview(it, tdata, passcode, self.reader)
+                dest = export_one(it, Path(out), tdata, passcode, reader=self.reader)
             except Exception as exc:
                 err = f"{exc.__class__.__name__}: {exc}"
             finally:
-                self._previewing = False
+                self._exporting = False
 
-            self.ui_q.put(("preview", str(path) if path else None, err))
+            self.ui_q.put(("export", str(dest) if dest else None, err))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -1478,7 +1489,7 @@ class CacheApp(LangMixin):
         """打开输出目录；目录还不存在时给出提示（不主动创建）。"""
         out = self.e_out.get().strip()
         if out and Path(out).is_dir():
-            os.startfile(out)
+            self._open_detached(out)
         else:
             messagebox.showinfo(_app_title(), t("cache.dialog.out_missing"))
 
@@ -1603,18 +1614,14 @@ class CacheApp(LangMixin):
         messagebox.showerror(_app_title(), f"{t(title_key)}\n\n{detail}")
         self.set_status_error(title_key, detail)
 
-    def _msg_preview(self, msg: tuple) -> None:
-        """预览解密结果：成功则用系统程序打开，失败则报错。"""
+    def _msg_export(self, msg: tuple) -> None:
+        """单条导出结果：成功只在状态栏给出完整路径，失败弹错误框。"""
         _, path, err = msg
         if err:
-            messagebox.showerror(_app_title(), t("cache.dialog.preview_failed_body", err=err))
-            self.set_status("cache.status.preview_failed")
+            messagebox.showerror(_app_title(), t("cache.dialog.export_failed", err=err))
+            self.set_status("cache.status.export_failed")
         else:
-            try:
-                os.startfile(path)
-                self.set_status("cache.status.preview_done", name=Path(path).name)
-            except Exception as exc:
-                messagebox.showerror(_app_title(), t("cache.dialog.cannot_open", exc=exc))
+            self.set_status("cache.status.export_done", path=path)
 
     def _msg_save_progress(self, msg: tuple) -> None:
         """保存进度：更新进度条与状态栏（状态栏显示当前文件名）。"""
@@ -1631,12 +1638,40 @@ class CacheApp(LangMixin):
         self.set_status("cache.status.save_done", ok=ok, fail=fail)
         if messagebox.askyesno(_app_title(),
                                t("cache.dialog.save_done_ask", ok=ok, fail=fail)):
-            try:
-                os.startfile(str(out))
-            except Exception as exc:
-                messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
+            self._open_detached(str(out))
         save_config({"out_dir": str(out), "kind": self.v_kind.get(),
                      "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
+
+    def _msg_open_failed(self, msg: tuple) -> None:
+        """系统默认程序没能打开文件（一般是该类型没有关联程序）。"""
+        _, path, _rc = msg
+        messagebox.showwarning(_app_title(),
+                               t("cache.dialog.open_unsupported", name=Path(path).name))
+
+    def _open_detached(self, path: str) -> None:
+        """用系统默认程序打开文件/目录。
+
+        启动被隔离在一次性子进程里（见 :func:`ui_kit.open_path`）：实测某些机器的
+        shell 环境会让 ShellExecute 以 0xC0000409 直接崩掉**调用进程**、或长时间卡住
+        （卡住时 Tk 主线程会一直“无响应”）。隔离后界面不再受影响。
+
+        这里不阻塞等待，只在后台线程里看一眼「是否立刻就失败了」，失败则回报界面。
+        """
+        try:
+            proc = ui_kit.open_path(path)
+        except Exception as exc:
+            messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
+            return
+
+        def watch() -> None:
+            try:
+                rc = proc.wait(timeout=5)
+            except Exception:
+                return               # 5 秒仍未退出 = 程序正常打开了，无需关心
+            if rc:
+                self.ui_q.put(("open_failed", path, rc))
+
+        threading.Thread(target=watch, daemon=True).start()
 
     # ------------------------- 状态栏 -------------------------
     def set_status_error(self, key: str, detail: str) -> None:

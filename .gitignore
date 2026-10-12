@@ -26,8 +26,6 @@ pytest-of-*/
 cache_thumbs/
 # 缓存索引：删掉后下次会重新解密全部缓存
 cache_index.json
-# 双击预览时解密出的临时文件（明文，建议不要长期保留）
-preview/
 # 视频抽帧临时目录（抽帧完即删）
 tmp_video/
 # 记住上次的 tdata 路径与偏好

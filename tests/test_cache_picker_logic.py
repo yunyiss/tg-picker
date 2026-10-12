@@ -87,14 +87,20 @@ def test_save_by_date_creates_dated_subfolders(tdata_dir: Path, tmp_path: Path):
     assert subs and all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) for s in subs), subs
 
 
-def test_open_preview_decrypts_to_file(tdata_dir: Path):
-    """双击预览：应解密出一个非空文件。"""
+def test_export_one_decrypts_to_file(tdata_dir: Path, tmp_path: Path):
+    """双击导出：应解密成非空文件，且重名加后缀而不覆盖。"""
     entries, _ = cp.load_cache(tdata_dir, "")
     picked = _images(entries, 1)
     assert picked, "样本里没有图片可用"
 
-    path = Path(cp.open_preview(picked[0], tdata_dir, ""))
-    assert path.exists() and path.stat().st_size > 0
+    out = tmp_path / "out"
+    dest = cp.export_one(picked[0], out, tdata_dir, "")
+    assert dest.exists() and dest.stat().st_size > 0
+    assert cs.sniff(dest.read_bytes()[:12]) is not None, "导出的不是媒体"
+
+    again = cp.export_one(picked[0], out, tdata_dir, "")
+    assert again != dest, "重名应加后缀而不是覆盖"
+    assert dest.exists(), "原文件不应被覆盖"
 
 
 def test_index_reuse_is_high(tdata_dir: Path):
