@@ -1,18 +1,24 @@
 # -*- coding: utf-8 -*-
 """功能自检：扫描目录、生成缩略图、复制/移动、按日期分文件夹。
 
-数据源优先用真实导出目录；若不存在（例如已被清理），
-则临时生成一组小样本图片自测，保证脚本随时可跑。
+数据源优先用命令行参数 / 环境变量 GALLERY_SRC 指定的目录；
+若都没给或不存在，则临时生成一组小样本图片自测，保证脚本随时可跑。
 """
+import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
-sys.path.insert(0, r"D:\agent\dsh\tg-picker")
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
 import gallery_picker as g
 
-_REAL = Path(r"D:\agent\dsh\tg-scoop-output")
+if len(sys.argv) > 1:
+    _REAL = Path(sys.argv[1])
+else:
+    _env = os.environ.get("GALLERY_SRC", "").strip()
+    _REAL = Path(_env) if _env else _HERE / "downloads"
 
 
 def _make_sample(root: Path) -> int:

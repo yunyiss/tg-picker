@@ -1,15 +1,48 @@
 # -*- coding: utf-8 -*-
-"""缓存版挑选器功能自检：读取真实 tdata 缓存、保存、预览、索引复用。"""
+"""缓存版挑选器功能自检：读取真实 tdata 缓存、保存、预览、索引复用。
+
+tdata 路径取自命令行参数或环境变量 TDATA_PATH，找不到则退出码 2 跳过。
+"""
+import os
 import sys
 import tempfile
 import time
 from pathlib import Path
 
-sys.path.insert(0, r"D:\agent\dsh\tg-picker")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_picker as cp
 import cache_source as cs
 
-TDATA = Path(r"D:\Telegram\tdata")
+
+def _resolve_tdata() -> Path | None:
+    if len(sys.argv) > 1:
+        return Path(sys.argv[1])
+    env = os.environ.get("TDATA_PATH", "").strip()
+    if env:
+        return Path(env)
+    cands = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            cands.append(Path(appdata) / "Telegram Desktop" / "tdata")
+    for drive in ("C:", "D:", "E:", "F:"):
+        cands.append(Path(f"{drive}/Telegram/tdata"))
+    for c in cands:
+        try:
+            if c.is_dir():
+                return c
+        except OSError:
+            continue
+    return None
+
+
+TDATA = _resolve_tdata()
+if TDATA is None:
+    print("跳过：未找到 tdata 目录。")
+    print("用法：python _selftest_cachepicker.py [tdata路径]   或设置 TDATA_PATH")
+    sys.exit(2)
+
+print(f"使用 tdata: {TDATA}")
 
 print("=== 1) 读取真实缓存（首次，需解密）===")
 t0 = time.time()

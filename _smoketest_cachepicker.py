@@ -9,10 +9,11 @@ import time
 import tkinter as tk
 from pathlib import Path
 
-sys.path.insert(0, r"D:\agent\dsh\tg-picker")
+_HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(_HERE))
 import cache_picker as cp
 
-LOG = Path(sys.argv[1] if len(sys.argv) > 1 else r"D:\agent\dsh\tg-picker\_smoketest_cache_log.txt")
+LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else _HERE / "_smoketest_cache_log.txt"
 LOG.write_text("", encoding="utf-8")
 
 

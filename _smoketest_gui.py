@@ -2,8 +2,9 @@
 """GUI 冒烟测试：构建窗口、跑一轮队列泵，然后自动关闭。不联网、不登录。"""
 import sys
 import tkinter as tk
+from pathlib import Path
 
-sys.path.insert(0, r"D:\agent\dsh\tg-picker")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import tg_picker as t
 
 root = tk.Tk()

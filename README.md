@@ -11,36 +11,66 @@
 
 > **本项目自包含**：解密所需的内核已随项目分发在 `_vendor/tg_scoop/`
 > （来自 [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)，MIT），
-> 因此**不依赖任何外部目录**，整个 `tg-picker` 文件夹拷到哪都能跑。
-> 出处与改动说明见 [`_vendor/README.md`](_vendor/README.md)。
+> 因此**不依赖任何外部目录**，整个文件夹拷到哪都能跑。
+> 出处说明见 [`_vendor/README.md`](_vendor/README.md)。
 
 ---
 
-## 一、环境
+## 快速开始
 
-本目录 `.venv` 已装好依赖（Pillow + pycryptodome + imageio-ffmpeg + telethon）。如需重装：
+```cmd
+git clone <本仓库地址>
+cd tg-picker
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt
+```
+
+然后按需要双击对应脚本（或按上表选择）：
+
+| 我想…… | 双击 | 说明 |
+|---|---|---|
+| 浏览并挑选 **Telegram 缓存里**的图 | `run_cache.cmd` | 首次会自动探测 `tdata` 位置，也可手动选 |
+| 挑选一个**本地文件夹**里的图 | `run_gallery.cmd` | |
+| 按**群/频道在线**浏览并下载 | `run.cmd` | 需先申请 api_id / api_hash（见第四节） |
+
+> **要求**：Python 3.11+（仅缓存版实测于 3.13）；
+> 桌面环境需有 Tk（Windows 官方安装包自带）。
+
+---
+
+## 一、环境与依赖
+
+依赖很轻，只有 4 个直接依赖（另有 3 个是 telethon 的传递依赖）：
+
+| 依赖 | 用途 | 装后体积 |
+|---|---|---|
+| `Pillow` | 解码/缩放图片、GUI 显示 | ~15 MB |
+| `pycryptodome` | AES 解密 tdata 缓存 | ~7 MB |
+| `imageio-ffmpeg` | 抽视频首帧（自带静态 ffmpeg，**无需系统装 ffmpeg**） | ~84 MB |
+| `telethon` | 仅在线挑选器需要 | ~13 MB |
+
+重装依赖：
 
 ```cmd
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-> 缓存挑选器依赖 `pycryptodome` 解密、`Pillow` 出图、`imageio-ffmpeg`
-> 抽视频首帧（自带静态 ffmpeg，无需系统安装）；
-> 在线挑选器额外依赖 `telethon`。
+> 只要缓存挑选器、不要在线挑图的话，可以只装前三个
+> （把 `telethon` 那行从 `requirements.txt` 删掉即可）。
 
-## 一·补、解密内核的来源
+## 一·补、解密内核的来源与边界
 
 `_vendor/tg_scoop/` 是从上游**原样复制**的 4 个文件（`__init__.py`、
 `exceptions.py`、`tdata_reader.py`、`cache_decryptor.py`），负责最不能写错的
 密码学部分：`TDF$` 容器解析、LocalKey 派生（PBKDF2-HMAC-SHA512）、
 AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
-本项目自己实现的是内核**之外**的部分：缓存遍历与索引、类型嗅探、缩略图
-生成（含 ffmpeg 抽帧）、以及全部 GUI 与交互逻辑。
+本项目自己实现的是内核**之外**的全部部分：缓存遍历与索引、类型嗅探、
+缩略图生成（含 ffmpeg 抽帧）、以及全部 GUI 与交互逻辑。
 
 加载优先级（见 `cache_source.find_decryptor_src()`）：
-`TG_SCOOP_SRC` 环境变量 → **`_vendor/`（默认）** → 外部 `tg-scoop` 检出（兜底）。
+`TG_SCOOP_SRC` 环境变量 → **`_vendor/`（默认）** → 同级 `tg-scoop/src`（开发兜底）。
 
 ---
 
@@ -52,7 +82,8 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 ### 使用
 
 1. 双击 **`run_cache.cmd`**
-2. 确认 `tdata 目录`（默认 `D:\Telegram\tdata`）；若设过 Telegram 的**锁定密码**则填上
+2. 确认 `tdata 目录`（会自动探测官方安装位置与便携版常见位置，也可点「浏览」手动选择）；
+   若设过 Telegram 的**锁定密码**则填上
 3. 点 **「读取缓存」**——首次约 15 秒（生成缩略图），之后启动约 0.6 秒
 4. 在缩略图墙上挑选：
    - **单击** 选中（变蓝打勾），再点取消

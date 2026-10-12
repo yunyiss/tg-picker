@@ -1,21 +1,63 @@
 # -*- coding: utf-8 -*-
-"""缓存读取自检：验证 TDEF 解密、类型嗅探、缩略图生成。"""
+"""缓存读取自检：验证 TDEF 解密、类型嗅探、缩略图生成。
+
+需要一份真实的 tdata 才能跑；路径取自命令行参数或环境变量 TDATA_PATH，
+都没有就尝试常见默认位置，仍找不到则以退出码 2 跳过（不是失败）。
+"""
+import os
 import sys
 import time
 from collections import Counter
 from pathlib import Path
 
-sys.path.insert(0, r"D:\agent\dsh\tg-picker")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 import cache_source as cs
+
+
+def _resolve_tdata() -> Path | None:
+    """按 参数 → 环境变量 → 常见路径 的顺序找 tdata。"""
+    if len(sys.argv) > 1:
+        return Path(sys.argv[1])
+    env = os.environ.get("TDATA_PATH", "").strip()
+    if env:
+        return Path(env)
+    cands = []
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        if appdata:
+            cands.append(Path(appdata) / "Telegram Desktop" / "tdata")
+    elif sys.platform == "darwin":
+        cands.append(Path.home() / "Library" / "Application Support"
+                     / "Telegram Desktop" / "tdata")
+    else:
+        cands.append(Path.home() / ".local" / "share" / "TelegramDesktop" / "tdata")
+    for drive in ("C:", "D:", "E:", "F:"):
+        cands.append(Path(f"{drive}/Telegram/tdata"))
+    for c in cands:
+        try:
+            if c.is_dir():
+                return c
+        except OSError:
+            continue
+    return None
+
+
+TDATA = _resolve_tdata()
+if TDATA is None:
+    print("跳过：未找到 tdata 目录。")
+    print("用法：python _selftest_cache.py [tdata路径]   或设置 TDATA_PATH")
+    sys.exit(2)
+
+print(f"使用 tdata: {TDATA}")
 
 print("=== 1) 定位解密模块 ===")
 src = cs.find_decryptor_src()
-print("tg-scoop 模块目录:", src)
-assert src, "找不到 tg-scoop 解密模块"
+print("解密模块目录:", src)
+assert src, "找不到解密模块（应存在 _vendor/tg_scoop）"
 
 print("=== 2) 派生 LocalKey（只读 tdata）===")
 t0 = time.time()
-reader = cs.CacheReader(Path(r"D:\Telegram\tdata"))
+reader = cs.CacheReader(TDATA)
 print(f"LocalKey 派生成功，耗时 {time.time()-t0:.2f}s，无密码")
 roots = reader.cache_roots()
 print("缓存根目录:", [str(x) for x in roots])
@@ -69,11 +111,11 @@ print("=== 6) 索引读写 ===")
 import tempfile
 with tempfile.TemporaryDirectory() as td:
     ip = Path(td) / "idx.json"
-    cs.save_index(ip, Path(r"D:\Telegram\tdata"), {"x": {"kind": "image", "ext": ".jpg", "size": 1, "mtime": 1.0}})
-    got = cs.load_index(ip, Path(r"D:\Telegram\tdata"))
+    cs.save_index(ip, TDATA, {"x": {"kind": "image", "ext": ".jpg", "size": 1, "mtime": 1.0}})
+    got = cs.load_index(ip, TDATA)
     assert got.get("x", {}).get("kind") == "image", got
     # tdata 变了应失效
-    got2 = cs.load_index(ip, Path(r"D:\Other\tdata"))
+    got2 = cs.load_index(ip, Path(td) / "别的tdata")
     assert got2 == {}, "tdata 路径变化后索引应失效"
 print("索引读写 + tdata 变更失效 ✓")
 

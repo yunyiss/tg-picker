@@ -308,10 +308,24 @@ class GalleryApp:
         self.root.after(80, self._pump)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        # 自动加载上次的目录（或默认目录）
+        # 自动加载上次的目录（或默认目录）。
+        # 句柄保存在 _auto_scan_job，若在此之前用户已手动扫描/选择目录，
+        # 可取消它，避免定时器稍后覆盖用户的操作（测试脚本也依赖这一点）。
+        self._auto_scan_job = None
         default = self.folder
         if default and default.is_dir():
-            self.root.after(200, lambda: self.start_scan(default))
+            self._auto_scan_job = self.root.after(
+                200, lambda: self.start_scan(default))
+
+    def _cancel_auto_scan(self) -> None:
+        """取消尚未触发的自动扫描（用户已自行指定目录时调用）。"""
+        job = getattr(self, "_auto_scan_job", None)
+        if job is not None:
+            try:
+                self.root.after_cancel(job)
+            except tk.TclError:
+                pass
+            self._auto_scan_job = None
 
     # ------------------------- 界面构建 -------------------------
     def _build_style(self) -> None:
@@ -441,8 +455,16 @@ class GalleryApp:
         cfg = load_config()
         default_folder = cfg.get("folder") or ""
         if not default_folder:
-            cand = Path(r"D:\agent\dsh\tg-scoop-output")
-            default_folder = str(cand if cand.is_dir() else HERE)
+            # 优先用常见的导出目录；都没有就落在程序所在目录（不硬编码盘符）
+            for cand in (HERE / "downloads", HERE / "挑选保存", HERE.parent / "tg-scoop-output"):
+                try:
+                    if cand.is_dir():
+                        default_folder = str(cand)
+                        break
+                except OSError:
+                    continue
+            if not default_folder:
+                default_folder = str(HERE)
         self.e_folder.delete(0, "end")
         self.e_folder.insert(0, default_folder)
         self.folder = Path(default_folder)
@@ -466,6 +488,7 @@ class GalleryApp:
         if chosen:
             self.e_folder.delete(0, "end")
             self.e_folder.insert(0, chosen)
+            self._cancel_auto_scan()
             self.start_scan(Path(chosen))
 
     def on_rescan(self) -> None:
@@ -473,6 +496,7 @@ class GalleryApp:
         if not folder.is_dir():
             messagebox.showwarning(APP_NAME, "文件夹不存在，请重新选择")
             return
+        self._cancel_auto_scan()
         self.start_scan(folder)
 
     def start_scan(self, folder: Path) -> None:
@@ -483,6 +507,8 @@ class GalleryApp:
         """
         if self.scanning:
             return
+        # 任何一次扫描都表示定时器已完成使命或已被取代，清掉句柄
+        self._auto_scan_job = None
         self.scanning = True
         self.gen += 1
         self.set_status(f"正在扫描 {folder} …")

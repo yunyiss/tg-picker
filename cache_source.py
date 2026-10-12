@@ -183,7 +183,7 @@ def find_decryptor_src() -> Path | None:
     优先级：
         1. TG_SCOOP_SRC 环境变量（便于开发时指向外部检出）
         2. 内置副本 _vendor/       ← 正常路径，保证自包含
-        3. 同级或默认位置的 tg-scoop 检出（旧布局，仅作兜底）
+        3. 同级 tg-scoop 检出的 src/  （旧布局，仅作开发兜底）
     """
     here = Path(__file__).resolve().parent
     candidates: list[Path] = []
@@ -193,7 +193,6 @@ def find_decryptor_src() -> Path | None:
     candidates += [
         here / "_vendor",
         here.parent / "tg-scoop" / "src",
-        Path(r"D:\agent\dsh\tg-scoop\src"),
     ]
     for c in candidates:
         try:

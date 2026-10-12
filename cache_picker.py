@@ -20,6 +20,7 @@ import concurrent.futures
 import json
 import os
 import queue
+import sys
 import threading
 import time
 import tkinter as tk
@@ -576,16 +577,44 @@ class CacheApp:
         self.e_search.delete(0, "end")
         self.on_filter_change()
 
+    def _default_tdata(self) -> str:
+        """探测 tdata 默认位置（跨平台，不硬编码盘符）。
+
+        顺序：Telegram 官方默认路径 → 便携版常见位置（程序旁 / 各盘根）。
+        找不到就返回空字符串，由用户手动选择。
+        """
+        cands: list[Path] = []
+        if sys.platform == "win32":
+            appdata = os.environ.get("APPDATA")
+            if appdata:
+                cands.append(Path(appdata) / "Telegram Desktop" / "tdata")
+        elif sys.platform == "darwin":
+            cands.append(Path.home() / "Library" / "Application Support"
+                         / "Telegram Desktop" / "tdata")
+        else:
+            cands.append(Path.home() / ".local" / "share" / "TelegramDesktop" / "tdata")
+        # 便携版：Telegram.exe 旁边的 tdata（可能在任何盘）
+        for anchor in (HERE, HERE.parent):
+            cands.append(anchor / "tdata")
+        for drive in ("C:", "D:", "E:", "F:"):
+            cands.append(Path(f"{drive}/Telegram/tdata"))
+        for c in cands:
+            try:
+                if c.is_dir():
+                    return str(c)
+            except OSError:
+                continue
+        return ""
+
     def _load_config(self) -> None:
         cfg = load_config()
         tdata = cfg.get("tdata") or ""
         if not tdata:
-            cand = Path(r"D:\Telegram\tdata")
-            tdata = str(cand if cand.is_dir() else "")
+            tdata = self._default_tdata()
         self.e_tdata.delete(0, "end")
         self.e_tdata.insert(0, tdata)
 
-        out = cfg.get("out_dir") or str(HERE.parent / "挑选保存")
+        out = cfg.get("out_dir") or str(HERE / "挑选保存")
         self.e_out.delete(0, "end")
         self.e_out.insert(0, out)
         if cfg.get("kind"):
