@@ -28,7 +28,7 @@ Telegram 的群组/频道可以开启 **「禁止保存」**（Restrict Saving C
 ## 快速开始
 
 ```cmd
-git clone <本仓库地址>
+git clone https://github.com/yunyiss/tg-picker.git
 cd tg-picker
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt

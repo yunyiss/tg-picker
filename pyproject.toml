@@ -12,6 +12,11 @@ readme = "README.md"
 requires-python = ">=3.11"
 keywords = ["telegram", "tdata", "tkinter", "media-picker"]
 
+[project.urls]
+Homepage = "https://github.com/yunyiss/tg-picker"
+Repository = "https://github.com/yunyiss/tg-picker"
+Issues = "https://github.com/yunyiss/tg-picker/issues"
+
 # ---------------------------------------------------------------------------
 # 代码风格：只启用确定性检查（未使用导入、导入排序等），不做格式化重排。
 # _vendor/ 是上游 tg-scoop 的原样副本，不参与 lint。

@@ -33,7 +33,7 @@ so you never have to export an entire chat.
 ## Quick start
 
 ```cmd
-git clone <this repo>
+git clone https://github.com/yunyiss/tg-picker.git
 cd tg-picker
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
