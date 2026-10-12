@@ -1,5 +1,31 @@
 # 变更记录
 
+## 2026-10-12（自包含：内置解密内核）
+
+### 背景
+此前 `cache_source.py` 依赖外部目录 `D:\agent\dsh\tg-scoop\src` 提供解密模块，
+导致「删掉 tg-scoop 就打不开工具」，也无法把 `tg-picker` 整体拷到别处运行。
+
+### 修改
+- 新增 `_vendor/tg_scoop/`，从上游 [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)
+  （MIT）复制**依赖闭包内的 4 个文件**：`__init__.py`、`exceptions.py`、
+  `tdata_reader.py`、`cache_decryptor.py`，并一并带上上游 `LICENSE`。
+  未复制上游的 CLI/GUI/提取编排/MTProto 等与本工具无关的模块。
+- `find_decryptor_src()` 的优先级明确为：
+  `TG_SCOOP_SRC` 环境变量 → **`_vendor/`（默认）** → 外部 tg-scoop 检出（仅兜底）。
+- 缺失模块时的报错文案改为指向 `_vendor`，不再引导用户去找外部目录。
+- 新增 `_vendor/README.md` 记录出处、许可、复制清单与"勿直接改上游副本"的约定。
+
+### 验证（真正的独立性测试）
+把外部 `D:\agent\dsh\tg-scoop` **临时改名使其不可见**，在此前提下：
+- 功能自检：读取 3034 个媒体、保存 5/5、按日期分目录、预览、索引复用 100%、
+  **tdata 只读未变** —— 全部通过。
+- GUI 端到端：载入 3034 个媒体（图 2477 / 视频 557）、缩略图生成 28 张
+  失败 0、选中并保存成功写出文件，stderr 无输出。
+- 解析确认 `find_decryptor_src()` 指向 `tg-picker\_vendor`。
+
+测试后已恢复外部目录原状，并确认其完好。
+
 ## 2026-10-10（UI 重设计）
 
 ### 背景

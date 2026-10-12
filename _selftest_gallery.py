@@ -1,5 +1,9 @@
 # -*- coding: utf-8 -*-
-"""功能自检：扫描真实目录、生成缩略图、复制/移动、按日期分文件夹。"""
+"""功能自检：扫描目录、生成缩略图、复制/移动、按日期分文件夹。
+
+数据源优先用真实导出目录；若不存在（例如已被清理），
+则临时生成一组小样本图片自测，保证脚本随时可跑。
+"""
 import shutil
 import sys
 import tempfile
@@ -8,9 +12,37 @@ from pathlib import Path
 sys.path.insert(0, r"D:\agent\dsh\tg-picker")
 import gallery_picker as g
 
-SRC = Path(r"D:\agent\dsh\tg-scoop-output")
+_REAL = Path(r"D:\agent\dsh\tg-scoop-output")
 
-print("=== 1) 扫描真实目录 ===")
+
+def _make_sample(root: Path) -> int:
+    """生成若干小图与假视频文件，返回图片数量。"""
+    from PIL import Image
+
+    root.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for i in range(6):
+        im = Image.new("RGB", (60 + i * 10, 40 + i * 5),
+                       (40 + i * 20, 80, 140 + i * 10))
+        im.save(root / f"sample_{i:02d}.jpg", "JPEG")
+        n += 1
+    for i in range(2):
+        (root / f"clip_{i:02d}.mp4").write_bytes(b"\x00\x00\x00\x18ftypmp42" + b"\x00" * 64)
+    return n
+
+
+_use_real = _REAL.is_dir()
+if _use_real:
+    SRC = _REAL
+    _tmp_ctx = None
+    print(f"=== 数据源：真实目录 {SRC} ===")
+else:
+    _tmp_ctx = tempfile.TemporaryDirectory()
+    SRC = Path(_tmp_ctx.name) / "sample"
+    _n = _make_sample(SRC)
+    print(f"=== 数据源：真实目录不存在，已生成 {_n} 张样本图 ===")
+
+print("=== 1) 扫描目录 ===")
 items = g.scan_folder(SRC)
 print(f"扫描到 {len(items)} 个媒体文件")
 assert len(items) > 0, "没扫到文件"
@@ -85,7 +117,7 @@ print("=== 5) 移动模式（源文件被移走）===")
 with tempfile.TemporaryDirectory() as td:
     sandbox = Path(td) / "src"
     sandbox.mkdir()
-    # 拷几个样本进沙箱，避免真的动 tg-scoop-output
+    # 拷几个样本进沙箱，避免动到数据源本身
     moved_src = []
     for m in imgs[:3]:
         dst = sandbox / m.path.name
@@ -105,5 +137,8 @@ assert g.human_size(0) == "-"
 assert g.human_size(1024) == "1.0 KB"
 assert g.unique_path(Path(tempfile.gettempdir()) / "绝不会存在的文件_zzz.jpg").name.endswith(".jpg")
 print("  human_size / unique_path ✓")
+
+if _tmp_ctx is not None:
+    _tmp_ctx.cleanup()
 
 print("\n全部功能自检通过 ✅")

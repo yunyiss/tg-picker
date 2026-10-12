@@ -171,10 +171,20 @@ class PasscodeRequired(CacheError):
 
 
 # ---------------------------------------------------------------------------
-# 定位 tg-scoop 的解密模块
+# 定位解密模块
+#
+# 默认使用随项目分发的 _vendor/tg_scoop（自包含，不依赖外部目录）；
+# 若该副本缺失，才回退到外部的 tg-scoop 检出或 TG_SCOOP_SRC。
+# _vendor 内的代码来自 GarrettFynn/tg-scoop（MIT），详见 _vendor/tg_scoop/LICENSE。
 # ---------------------------------------------------------------------------
 def find_decryptor_src() -> Path | None:
-    """返回包含 tg_scoop 包的目录（供 sys.path 使用），找不到返回 None。"""
+    """返回包含 tg_scoop 包的目录（供 sys.path 使用），找不到返回 None。
+
+    优先级：
+        1. TG_SCOOP_SRC 环境变量（便于开发时指向外部检出）
+        2. 内置副本 _vendor/       ← 正常路径，保证自包含
+        3. 同级或默认位置的 tg-scoop 检出（旧布局，仅作兜底）
+    """
     here = Path(__file__).resolve().parent
     candidates: list[Path] = []
     env = os.environ.get("TG_SCOOP_SRC", "").strip()
@@ -210,13 +220,14 @@ class CacheEntry:
 
 
 def _import_decryptor():
-    """导入 tg-scoop 的 TdataReader / CacheDecryptor / iter_cache_files。"""
+    """导入解密模块（内置副本优先）。"""
     src = find_decryptor_src()
     if src is None:
         raise CacheError(
-            "找不到 tg-scoop 的解密模块。\n\n"
-            "请确认 D:\\agent\\dsh\\tg-scoop\\src 存在，"
-            "或设置环境变量 TG_SCOOP_SRC 指向该目录。"
+            "找不到解密模块。\n\n"
+            "本工具自带 _vendor/tg_scoop，正常不应缺失；"
+            "请确认 tg-picker\\_vendor\\tg_scoop\\cache_decryptor.py 存在，"
+            "或设置环境变量 TG_SCOOP_SRC 指向包含 tg_scoop 包的目录。"
         )
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))

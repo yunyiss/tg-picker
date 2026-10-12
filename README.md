@@ -9,19 +9,38 @@
 | **文件夹挑选器** | 本地已导出的图片文件夹 | 不需要 | `run_gallery.cmd` |
 | **在线挑选器** | Telegram API 按群/频道浏览 | 需要 api_id / api_hash | `run.cmd` |
 
+> **本项目自包含**：解密所需的内核已随项目分发在 `_vendor/tg_scoop/`
+> （来自 [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)，MIT），
+> 因此**不依赖任何外部目录**，整个 `tg-picker` 文件夹拷到哪都能跑。
+> 出处与改动说明见 [`_vendor/README.md`](_vendor/README.md)。
+
 ---
 
 ## 一、环境
 
-本目录 `.venv` 已装好依赖（Pillow + pycryptodome + telethon）。如需重装：
+本目录 `.venv` 已装好依赖（Pillow + pycryptodome + imageio-ffmpeg + telethon）。如需重装：
 
 ```cmd
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-> 缓存挑选器依赖 `pycryptodome` 解密、`Pillow` 出图；
+> 缓存挑选器依赖 `pycryptodome` 解密、`Pillow` 出图、`imageio-ffmpeg`
+> 抽视频首帧（自带静态 ffmpeg，无需系统安装）；
 > 在线挑选器额外依赖 `telethon`。
+
+## 一·补、解密内核的来源
+
+`_vendor/tg_scoop/` 是从上游**原样复制**的 4 个文件（`__init__.py`、
+`exceptions.py`、`tdata_reader.py`、`cache_decryptor.py`），负责最不能写错的
+密码学部分：`TDF$` 容器解析、LocalKey 派生（PBKDF2-HMAC-SHA512）、
+AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
+
+本项目自己实现的是内核**之外**的部分：缓存遍历与索引、类型嗅探、缩略图
+生成（含 ffmpeg 抽帧）、以及全部 GUI 与交互逻辑。
+
+加载优先级（见 `cache_source.find_decryptor_src()`）：
+`TG_SCOOP_SRC` 环境变量 → **`_vendor/`（默认）** → 外部 `tg-scoop` 检出（兜底）。
 
 ---
 
@@ -47,8 +66,8 @@ python -m venv .venv
 - **只读 `tdata`**：绝不修改、绝不删除其中任何字节（已验证读取前后文件修改时间不变）
 - **保存前不写出任何文件**；保存只写入你指定的输出目录
 - 界面里**没有"移动"选项**，避免误动缓存
-- 解密逻辑复用 [tg-scoop](https://github.com/GarrettFynn/tg-scoop)（MIT），
-  该实现已从本机缓存成功解出 3019 个媒体、失败 0 个
+- 解密内核为 [tg-scoop](https://github.com/GarrettFynn/tg-scoop)（MIT）的
+  内置副本，已从本机缓存成功解出 3019 个媒体、失败 0 个
 
 ### 提示
 
@@ -108,6 +127,7 @@ python -m venv .venv
 | `cache_picker.py` | 缓存挑选器 GUI |
 | `gallery_picker.py` | 文件夹挑选器 GUI |
 | `tg_picker.py` | 在线挑选器 GUI（Telethon） |
+| `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run_cache.cmd` / `run_gallery.cmd` / `run.cmd` | 三个启动脚本 |
 | `requirements.txt` | 依赖清单 |
 | `CHANGELOG.md` | 变更记录 |
