@@ -15,6 +15,8 @@
 *.jpeg binary
 *.ico binary
 
-# _vendor/ 是上游 tg-scoop 的原样副本：不参与换行转换（保持与上游逐字节一致），
-# 并标记为 vendored，避免污染语言统计
-_vendor/** -text linguist-vendored
+# _vendor/ 是上游 tg-scoop 的原样副本：不参与任何改写，只标记为 vendored，
+# 避免污染语言统计。
+# 注意**不要**给它加 "-text"：那会让索引改存工作区的原始字节（CRLF），
+# 反而把上游文件从已归一化的 LF 改写成 CRLF，产生无意义的 churn。
+_vendor/** linguist-vendored
