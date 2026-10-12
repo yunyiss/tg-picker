@@ -1736,6 +1736,7 @@ class CacheApp(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
+    ui_kit.enable_file_log(HERE / "logs" / "cache_picker.log")
     root = tk.Tk()
     CacheApp(root)
     root.mainloop()

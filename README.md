@@ -171,6 +171,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `tmp_video/` | 视频抽帧临时目录（自动清理） |
 | `cache_config.json` | 记住上次的路径与偏好 |
 | `language.json` | 语言偏好（两个工具共享） |
+| `logs/` | 启动与报错日志（无控制台启动时由程序写入，打不开工具时先看这里） |
 | `tg_picker.session`、`config.json` | 在线挑选器的会话与凭据（**勿外传**） |
 
 ---

@@ -1,22 +1,30 @@
 @echo off
-rem TG 图片挑选下载器 —— 启动脚本（首次运行会弹出登录窗口）
-rem 保留控制台便于查看日志与报错；所有路径以本脚本所在目录 (%~dp0) 为基准。
+rem TG media picker - online picker (sign-in required on first run).
+rem
+rem ASCII-only on purpose: cmd.exe parses .cmd files using the console code page
+rem (GBK on Chinese Windows), so non-ASCII text here gets mis-decoded and can
+rem break parsing ("... is not recognized as an internal or external command").
+rem
+rem Launches pythonw.exe, so no console window is shown. The app redirects its
+rem own stdout/stderr to logs\tg_picker.log, so startup errors and tracebacks
+rem are still recorded there.
+rem
+rem All paths are resolved relative to this script's own directory (%~dp0).
 setlocal
 cd /d "%~dp0"
 
-set "PY=%~dp0.venv\Scripts\python.exe"
+set "PYW=%~dp0.venv\Scripts\pythonw.exe"
 set "APP=%~dp0tg_picker.py"
 
-if not exist "%PY%" (
-    echo [错误/Error] 未找到虚拟环境 .venv / virtual environment .venv not found
-    echo 请先在本目录执行 / please run the following in this folder:
+if not exist "%PYW%" (
+    echo [ERROR] Virtual environment not found: .venv
+    echo Please run the following in this folder first:
     echo     python -m venv .venv
     echo     .venv\Scripts\pip install -r requirements.txt
     pause
     exit /b 1
 )
 
-rem 想完全无窗口可把 PY 换成 pythonw
-"%PY%" "%APP%"
-if errorlevel 1 pause
+rem Detach so this launcher exits at once; pythonw shows no console window.
+start "" "%PYW%" "%APP%"
 endlocal

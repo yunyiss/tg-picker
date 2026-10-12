@@ -200,6 +200,7 @@ never scrolled past in the client).
 | `tmp_video/` | Temporary directory for video frame extraction (cleaned up automatically) |
 | `cache_config.json` | Remembers the last paths and preferences |
 | `language.json` | Language preference (shared by both tools) |
+| `logs/` | Startup and error log (written by the app when it runs without a console — check here first if a tool will not start) |
 | `tg_picker.session`, `config.json` | Session and credentials for the online picker (**do not share**) |
 
 ---

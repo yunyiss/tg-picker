@@ -591,8 +591,8 @@ class App(LangMixin):
         self._init_lang_support()
 
         root.title(_app_title())
-        root.geometry("1180x820")
-        root.minsize(940, 620)
+        root.geometry("1280x880")
+        root.minsize(1020, 680)
         root.configure(bg=BG)
 
         self._build_style()
@@ -1126,6 +1126,7 @@ class App(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
+    ui_kit.enable_file_log(APP_DIR / "logs" / "tg_picker.log")
     root = tk.Tk()
     App(root)
     root.mainloop()

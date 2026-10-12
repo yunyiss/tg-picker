@@ -47,6 +47,29 @@ def unique_path(path: Path) -> Path:
     raise RuntimeError(t("common.err_name_conflict", name=path.name))
 
 
+def enable_file_log(log_path: Path) -> Path | None:
+    """把标准输出/错误接到日志文件，用于 ``pythonw``（无控制台）启动时收集报错。
+
+    为什么放在 Python 侧、而不是让 ``.cmd`` 做 ``>log`` 重定向：
+
+    - ``pythonw`` 启动的进程没有控制台，``sys.stdout`` / ``sys.stderr`` 都是 ``None``，
+      任何 traceback 与 ``print(..., file=sys.stderr)`` 都会**无声丢失**；
+    - 批处理的重定向依赖句柄继承与引号，在 Windows 上很容易出岔子——本项目刚因为
+      ``.cmd`` 里的非 ASCII 踩过坑，这里不再让 shell 承担这类职责。
+
+    只在**没有控制台**时接管（``sys.stderr is None``）；从终端用 ``python.exe`` 运行时
+    保留控制台输出，方便开发调试。返回日志文件路径；未接管时返回 ``None``。
+    """
+    if sys.stderr is not None:
+        return None
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    stream = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
+    sys.stdout = stream
+    sys.stderr = stream
+    return log_path
+
+
 def load_config(path: Path) -> dict:
     """读取 JSON 配置。
 

@@ -1,7 +1,15 @@
 @echo off
-rem Telegram 缓存挑选器 —— 直接读 tdata 缓存，边看边挑边保存
-rem 双击即可运行。用 pythonw 启动（无控制台窗口）；所有路径都以本脚本所在目录
-rem (%~dp0) 为基准，因此不依赖当前工作目录，从任何位置调用都一致。
+rem Telegram cache picker - browse the local tdata cache, pick, and save.
+rem
+rem ASCII-only on purpose: cmd.exe parses .cmd files using the console code page
+rem (GBK on Chinese Windows), so non-ASCII text here gets mis-decoded and can
+rem break parsing ("... is not recognized as an internal or external command").
+rem
+rem Launches pythonw.exe, so no console window is shown. The app redirects its
+rem own stdout/stderr to logs\cache_picker.log, so startup errors and tracebacks
+rem are still recorded there.
+rem
+rem All paths are resolved relative to this script's own directory (%~dp0).
 setlocal
 cd /d "%~dp0"
 
@@ -9,14 +17,14 @@ set "PYW=%~dp0.venv\Scripts\pythonw.exe"
 set "APP=%~dp0cache_picker.py"
 
 if not exist "%PYW%" (
-    echo [错误/Error] 未找到虚拟环境 .venv / virtual environment .venv not found
-    echo 请先执行 / please run the following first:
+    echo [ERROR] Virtual environment not found: .venv
+    echo Please run the following first:
     echo     python -m venv .venv
     echo     .venv\Scripts\pip install -r requirements.txt
     pause
     exit /b 1
 )
 
-rem pythonw = 无控制台窗口；start 让启动器立刻退出，应用在后台运行
+rem Detach so this launcher exits at once; pythonw shows no console window.
 start "" "%PYW%" "%APP%"
 endlocal
