@@ -157,8 +157,8 @@ never scrolled past in the client).
    verification asks for the password as well)
 3. Enter the group/channel (`@username`, a `t.me` link, an invite link, or a numeric ID)
    → **Load media**
-4. Click to select / **double-click = download that one now and open it** →
-   **Download selected**
+4. Click to select / **double-click = download that one now** (the path appears in the
+   log below) → **Download selected**
 
 ### Notes
 
@@ -295,7 +295,7 @@ No business code changes are needed — just three steps:
 3. Run the self-test to confirm nothing is untranslated and no placeholder is broken:
 
    ```cmd
-   .venv\Scripts\python.exe _selftest_i18n.py
+   .venv\Scripts\python.exe -m pytest tests/test_i18n.py
    ```
 
 The self-test verifies that the two resource files have identical key sets, that every
@@ -364,7 +364,8 @@ python -m venv .venv
 |---|---|---|
 | `tests/test_i18n.py` | identical key sets, identical placeholders, every source key has resources, switching behaviour; walks both UIs in English mode to prove no Chinese remains | no tdata; the last two need a display |
 | `tests/test_cache_source.py` | decryptor discovery, LocalKey derivation, enumerate/decrypt/sniff/thumbnail, index round-trip and invalidation, tdata read-only | real tdata |
-| `tests/test_cache_picker_logic.py` | loading the cache, saving (including no-overwrite on name clash), date subfolders, preview, index reuse rate | real tdata |
+| `tests/test_cache_picker_logic.py` | loading the cache, saving (including no-overwrite on name clash), date subfolders, single-item export, cache cleaning (artifacts only), index reuse rate | real tdata |
+| `tests/test_ui_kit.py` | path helpers: numeric suffix on name clashes, never overwrite an existing file | none |
 | `tests/test_gui_online.py` | online picker GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
 | `tests/test_gui_cache.py` | cache picker GUI: virtualized rendering, scroll performance, selection actions, language switch | real tdata + display |
 
@@ -386,3 +387,14 @@ python -m venv .venv
   git add --renormalize .
   git commit -m "chore: normalize line endings to LF"
   ```
+
+---
+
+## 9. License
+
+This project is released under the **MIT License** — see [LICENSE](LICENSE).
+
+- The bundled decryption core `_vendor/tg_scoop/` comes from
+  [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop) (MIT); its copyright
+  notice and license text are kept in `_vendor/tg_scoop/LICENSE`.
+- [LICENSE](LICENSE) also contains third-party attribution and a disclaimer.

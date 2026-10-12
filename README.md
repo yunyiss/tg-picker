@@ -132,7 +132,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 1. 双击 `run.cmd`，填 api_id / api_hash / 手机号（`+8613800000000` 格式）→「登录 / 连接」
 2. 在 Telegram App 里收验证码，填到弹出的「验证码/密码」行（两步验证会再问一次密码）
 3. 填群/频道（`@用户名`、`t.me` 链接、邀请链接、数字 ID）→「加载媒体」
-4. 单击选中 / **双击 = 立刻下载这一张并打开** →「下载选中」
+4. 单击选中 / **双击 = 立刻下载这一张**（下载路径见下方日志）→「下载选中」
 
 ### 注意
 
@@ -259,7 +259,7 @@ self.b_save.configure(text=t("cache.bottom.save_n", n=3))   # → 保存选中�
 3. 运行自检确认没有漏翻或占位符写错：
 
    ```cmd
-   .venv\Scripts\python.exe _selftest_i18n.py
+   .venv\Scripts\python.exe -m pytest tests/test_i18n.py
    ```
 
 自检会校验：两份资源键集合一致、每条取值的 `{}` 占位符一致且非空、源码里所有
@@ -319,7 +319,8 @@ python -m venv .venv
 |---|---|---|
 | `tests/test_i18n.py` | 两份资源键一致、占位符一致、源码键全覆盖、切换行为；英文模式遍历界面确认无中文残留 | 无 tdata；最后两项需显示器 |
 | `tests/test_cache_source.py` | 定位解密内核、派生 LocalKey、枚举/解密/嗅探/缩略图、索引读写与失效、tdata 只读 | 需真实 tdata |
-| `tests/test_cache_picker_logic.py` | 读取缓存、保存（含重名不覆盖）、按日期分目录、预览、索引复用率 | 需真实 tdata |
+| `tests/test_cache_picker_logic.py` | 读取缓存、保存（含重名不覆盖）、按日期分目录、单条导出、清理缓存（只删缓存产物）、索引复用率 | 需真实 tdata |
+| `tests/test_ui_kit.py` | 路径工具：重名加序号、绝不覆盖已有文件 | 无 |
 | `tests/test_gui_online.py` | 在线挑选器 GUI：建窗、队列分支、单元格选中、语言切换、验证码回填 | 需显示器（不联网） |
 | `tests/test_gui_cache.py` | 缓存挑选器 GUI：虚拟化渲染、滚动性能、选择操作、语言切换 | 需真实 tdata + 显示器 |
 
@@ -339,3 +340,14 @@ python -m venv .venv
   git add --renormalize .
   git commit -m "chore: 统一换行符为 LF"
   ```
+
+---
+
+## 九、许可证
+
+本项目采用 **MIT License**，全文见 [LICENSE](LICENSE)。
+
+- 内嵌的解密内核 `_vendor/tg_scoop/` 来自
+  [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)（MIT），
+  其版权声明与许可文本随附于 `_vendor/tg_scoop/LICENSE`；
+- [LICENSE](LICENSE) 中另含第三方代码标注与免责声明。
