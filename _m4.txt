@@ -1,0 +1,14 @@
+fix: 消除视频缩略图加载时的控制台闪窗
+
+界面用 pythonw.exe（无控制台）启动，而 ffmpeg 是控制台程序，
+Windows 每次调用都会为它新建一个控制台窗口。缩略图边滚动边生成、
+每个视频还要试两种抽帧策略，于是表现为"不断弹窗"。
+
+修复：给 ffmpeg 子进程加 CREATE_NO_WINDOW 与 STARTUPINFO(SW_HIDE)。
+抽帧由多线程并发发起，故每次调用新建 STARTUPINFO，不复用共享对象。
+
+在 pythonw 下做 A/B 实证（枚举子进程顶层窗口并判可见性）：
+旧行为可见窗口数 1，修复后 0。
+
+注意：先前用 python.exe 测试从未复现，因为 python.exe 自带控制台，
+ffmpeg 继承它而不新建窗口；必须用 pythonw 才能复现该问题。

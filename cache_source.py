@@ -38,12 +38,35 @@ THUMB = 140
 HEAD_BYTES = 64 * 1024          # 索引阶段嗅探时解密的前缀长度
 MAX_DECRYPT_BYTES = 512 * 1024 * 1024
 
-# 视频首帧提取：把解密后的明文通过管道交给 ffmpeg 抽一帧。
+# 视频首帧提取：把解密后的明文写成临时文件，交给 ffmpeg 抽一帧。
 # ffmpeg 由 imageio-ffmpeg 提供（自带静态二进制，无需系统安装）。
 VIDEO_THUMB_TIMEOUT = 30        # 单个视频抽帧超时（秒）
 VIDEO_SEEK = "0.1"              # 抽帧位置：略微避开可能全黑的开头
 
 _FFMPEG_CACHE: str | None = None
+
+# Windows：GUI 通过 pythonw.exe（无控制台）启动时，每次调用 ffmpeg.exe
+# 这类控制台程序，系统都会为它**新建一个控制台窗口**并闪一下。缩略图是
+# 边滚动边生成的，于是表现为"加载时不断弹窗"。必须显式要求不创建窗口。
+_NO_WINDOW_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
+_HAS_STARTUPINFO = hasattr(subprocess, "STARTUPINFO")
+
+
+def _hidden_subprocess_kwargs() -> dict:
+    """返回让子进程不弹控制台窗口的 subprocess 参数（仅 Windows 生效）。
+
+    每次调用都新建 STARTUPINFO：抽帧由多线程并发发起，
+    复用同一个对象不安全（同时被多个 CreateProcess 读取）。
+    """
+    kwargs: dict = {}
+    if _NO_WINDOW_FLAGS:
+        kwargs["creationflags"] = _NO_WINDOW_FLAGS
+    if _HAS_STARTUPINFO:
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        si.wShowWindow = subprocess.SW_HIDE
+        kwargs["startupinfo"] = si
+    return kwargs
 
 
 def ffmpeg_exe() -> str | None:
@@ -116,6 +139,8 @@ def make_video_thumb(data: bytes, temp_dir: Path | None = None) -> Image.Image |
                     stdout=subprocess.PIPE,
                     stderr=subprocess.DEVNULL,
                     timeout=VIDEO_THUMB_TIMEOUT,
+                    # 关键：否则 pythonw 下每个视频都会闪出一个控制台窗口
+                    **_hidden_subprocess_kwargs(),
                 )
             except (OSError, subprocess.SubprocessError):
                 continue
