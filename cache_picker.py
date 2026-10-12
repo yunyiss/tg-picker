@@ -33,9 +33,10 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 import cache_source as cs
+import i18n
 from cache_source import human_size, unique_path
+from i18n import t
 
-APP_NAME = "Telegram 缓存挑选器"
 HERE = Path(__file__).resolve().parent
 CONFIG_PATH = HERE / "cache_config.json"
 THUMB_DIR = HERE / "cache_thumbs"
@@ -43,6 +44,23 @@ INDEX_PATH = HERE / "cache_index.json"
 PREVIEW_DIR = HERE / "preview"
 VIDEO_TMP_DIR = HERE / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 THUMB = cs.THUMB
+
+
+def _app_title() -> str:
+    """窗口标题（同时用作所有对话框的标题）。"""
+    return t("app.cache_title")
+
+
+# 排序：**内部键**与显示文案分离（显示文案随语言变化，逻辑只看键）。
+# 早先直接把中文文案当键并写进 cache_config.json，故保留旧值迁移表。
+SORT_KEYS = ("date_desc", "date_asc", "size_desc", "size_asc", "source")
+_LEGACY_SORT = {
+    "日期 新→旧": "date_desc",
+    "日期 旧→新": "date_asc",
+    "大小 大→小": "size_desc",
+    "大小 小→大": "size_asc",
+    "来源目录": "source",
+}
 
 # ---------------------------------------------------------------------------
 # 视觉规范
@@ -234,7 +252,14 @@ class CacheApp:
         self._refresh_job = None
         self._search_job = None
 
-        root.title(APP_NAME)
+        # i18n：先定语言再建界面（首次绘制即用正确语言）。
+        # _tr_widgets 登记"构建期设定"的静态文案，供切换语言时统一重刷。
+        i18n.init()
+        self._tr_widgets: list[tuple[object, str, dict]] = []
+        self._status_fn = None            # 状态栏当前内容的重放函数（None = 即席文本）
+        self._lang_btns: dict[str, ttk.Button] = {}
+
+        root.title(_app_title())
         root.geometry("1280x880")
         root.minsize(1020, 680)
         root.configure(bg=BG)
@@ -248,6 +273,9 @@ class CacheApp:
         self._build_bottombar()
         self._build_grid()
         self._load_config()
+        self.update_count()          # 让计数/主按钮/顶栏概览在首次也在正确语言下
+
+        i18n.on_change(self.retranslate)
 
         self.root.bind("<Control-a>", lambda e: (self.on_select_all(), "break")[1])
         self.root.bind("<Escape>", lambda e: self.on_clear_sel())
@@ -402,13 +430,69 @@ class CacheApp:
         """一条 1px 分隔线，用于划分区域。"""
         ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
 
+    # ---------- i18n ----------
+    def _T(self, widget, key: str, **kw):
+        """给控件设置 i18n 文案并登记，切换语言时统一重刷。
+
+        只用于**构建期一次性设定**的静态文案；文本由运行时函数拥有的控件
+        （l_count / b_save / l_status 等）改由 retranslate 调用对应函数重算。
+        """
+        widget.configure(text=t(key, **kw))
+        self._tr_widgets.append((widget, key, kw))
+        return widget
+
+    def _build_lang_switch(self, parent) -> None:
+        """语言切换分段按钮（按钮文案固定为 中文/English，不随当前语言变化）。"""
+        box = ttk.Frame(parent, style="Panel.TFrame")
+        box.pack(side="right", padx=(0, 12))
+        for code, label in i18n.available().items():
+            b = ttk.Button(box, text=label, style="Seg.TButton", width=8,
+                           command=lambda c=code: self.on_lang_change(c))
+            b.pack(side="left", padx=(0, 4))
+            self._lang_btns[code] = b
+        self._sync_lang_buttons()
+
+    def _sync_lang_buttons(self) -> None:
+        cur = i18n.get_language()
+        for code, btn in self._lang_btns.items():
+            btn.configure(style="SegOn.TButton" if code == cur else "Seg.TButton")
+
+    def on_lang_change(self, code: str) -> None:
+        """切换语言：触发全局刷新并记忆偏好。"""
+        if code == i18n.get_language():
+            return
+        i18n.set_language(code)
+        i18n.save_language(code)
+
+    def retranslate(self) -> None:
+        """语言切换后重刷本窗口的全部文案（静态登记 + 动态重算）。"""
+        for widget, key, kw in self._tr_widgets:
+            try:
+                widget.configure(text=t(key, **kw))
+            except tk.TclError:
+                pass
+        # 排序下拉：先写 values 再回显（readonly 下先 set 会被复位）
+        self.cb_sort.configure(values=[t(f"sort.{k}") for k in SORT_KEYS])
+        self.cb_sort.set(t(f"sort.{self.v_sort.get()}"))
+        self._sync_kind_buttons()          # 含三个分段按钮的文案
+        # 网格里的视频角标是 Canvas 图元，文案只在新建时设过，需显式重设
+        for cell in self.cell_pool:
+            if cell.get("tag_txt") is not None:
+                self._canvas_cfg(cell, "tag_txt", text=t("cell.video_tag"))
+        self.update_count()                # 计数 + 主按钮 + 顶栏概览
+        self._render_status()
+        self.root.title(_app_title())
+        self._sync_lang_buttons()
+
     def _build_header(self) -> None:
         # padding 左缘与设置区/底栏标签对齐（同为 16）
         bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 12, 16, 12))
         bar.pack(fill="x", side="top")
-        ttk.Label(bar, text="Telegram 缓存挑选器", style="Title.TLabel").pack(side="left")
+        # 语言切换放最右，其左是视图概览
+        self._build_lang_switch(bar)
         self.l_header_stat = ttk.Label(bar, text="", style="Status.TLabel")
         self.l_header_stat.pack(side="right")
+        self._T(ttk.Label(bar, style="Title.TLabel"), "app.cache_title").pack(side="left")
         self._divider()
 
     # ---------- 数据源设置 ----------
@@ -419,24 +503,28 @@ class CacheApp:
         # 第一行：数据源 + 主操作（统一 8px 间距节奏）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
         r1.pack(fill="x")
-        ttk.Label(r1, text="tdata 目录", style="Field.TLabel", width=10).pack(side="left")
+        self._T(ttk.Label(r1, style="Field.TLabel", width=14),
+                "cache.setup.tdata_label").pack(side="left")
         self.e_tdata = ttk.Entry(r1)
         self.e_tdata.pack(side="left", fill="x", expand=True, padx=(8, 8))
-        ttk.Button(r1, text="浏览…", command=self.on_browse).pack(side="left")
-        self.b_load = ttk.Button(r1, text="读取缓存", style="Accent.TButton",
-                                 command=self.on_load)
+        self._T(ttk.Button(r1, command=self.on_browse), "common.browse").pack(side="left")
+        self.b_load = self._T(
+            ttk.Button(r1, style="Accent.TButton", command=self.on_load),
+            "cache.setup.load_btn")
         self.b_load.pack(side="left", padx=(8, 0))
 
         # 第二行：可选密码 + 只读提示（提示只在此处出现一次）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
         r2.pack(fill="x", pady=(10, 0))
-        ttk.Label(r2, text="锁定密码", style="Field.TLabel", width=10).pack(side="left")
+        self._T(ttk.Label(r2, style="Field.TLabel", width=14),
+                "cache.setup.passcode_label").pack(side="left")
         self.e_pass = ttk.Entry(r2, width=16, show="*")
         self.e_pass.pack(side="left", padx=(8, 8))
-        self.b_reload = ttk.Button(r2, text="重新扫描", command=self.on_reload)
+        self.b_reload = self._T(ttk.Button(r2, command=self.on_reload),
+                                "cache.setup.rescan_btn")
         self.b_reload.pack(side="left")
-        ttk.Label(r2, text="没设过就留空　·　原 tdata 只读，不会被改动",
-                  style="Hint.TLabel").pack(side="left", padx=(12, 0))
+        self._T(ttk.Label(r2, style="Hint.TLabel"), "cache.setup.hint").pack(
+            side="left", padx=(12, 0))
         self._divider()
 
     # ---------- 筛选栏（独立一档背景）----------
@@ -448,39 +536,55 @@ class CacheApp:
         row.pack(fill="x")
 
         # 类型：分段按钮（clam 单选钮无法配色，故用按钮表达选中态）
-        ttk.Label(row, text="类型", style="BarField.TLabel").pack(side="left")
+        self._T(ttk.Label(row, style="BarField.TLabel"),
+                "cache.toolbar.kind_label").pack(side="left")
         self.v_kind = tk.StringVar(value="image")
         self._kind_btns: dict[str, ttk.Button] = {}
         kind_box = ttk.Frame(row, style="Bar.TFrame")
         kind_box.pack(side="left", padx=(8, 20))
-        for txt, val in (("图片", "image"), ("视频", "video"), ("全部", "all")):
-            b = ttk.Button(kind_box, text=txt, style="Seg.TButton",
+        for val in ("image", "video", "all"):
+            b = ttk.Button(kind_box, text=t(f"kind.{val}"), style="Seg.TButton",
                            command=lambda v=val: self.on_kind_change(v))
             b.pack(side="left", padx=(0, 6))
             self._kind_btns[val] = b
         self._sync_kind_buttons()
 
-        ttk.Label(row, text="排序", style="BarField.TLabel").pack(side="left")
+        self._T(ttk.Label(row, style="BarField.TLabel"),
+                "cache.toolbar.sort_label").pack(side="left")
+        # 排序用**内部键**驱动逻辑，下拉里显示的是随语言变化的文案
+        self.v_sort = tk.StringVar(value="date_desc")
         self.cb_sort = ttk.Combobox(
-            row, width=11, state="readonly",
-            values=("日期 新→旧", "日期 旧→新", "大小 大→小", "大小 小→大", "来源目录"),
+            row, width=18, state="readonly",
+            values=[t(f"sort.{k}") for k in SORT_KEYS],
         )
-        self.cb_sort.set("日期 新→旧")
+        self.cb_sort.set(t("sort.date_desc"))
         self.cb_sort.pack(side="left", padx=(8, 20))
-        self.cb_sort.bind("<<ComboboxSelected>>", lambda e: self.on_filter_change())
+        self.cb_sort.bind("<<ComboboxSelected>>", lambda e: self.on_sort_change())
 
         # 搜索靠右，与筛选区分开
-        ttk.Button(row, text="✕", command=self.on_clear_search).pack(side="right")
+        self._T(ttk.Button(row, command=self.on_clear_search),
+                "cache.toolbar.clear_search").pack(side="right")
         self.e_search = ttk.Entry(row, width=22)
         self.e_search.pack(side="right", padx=(8, 8))
         self.e_search.bind("<KeyRelease>", self._on_search_key)
-        ttk.Label(row, text="搜索", style="BarField.TLabel").pack(side="right")
+        self._T(ttk.Label(row, style="BarField.TLabel"),
+                "cache.toolbar.search_label").pack(side="right")
 
     def _sync_kind_buttons(self) -> None:
-        """同步类型分段按钮的选中样式。"""
+        """同步类型分段按钮的**文案**与选中样式（语言切换后也要跟着变）。"""
         cur = self.v_kind.get()
         for val, btn in self._kind_btns.items():
-            btn.configure(style="SegOn.TButton" if val == cur else "Seg.TButton")
+            btn.configure(text=t(f"kind.{val}"),
+                          style="SegOn.TButton" if val == cur else "Seg.TButton")
+
+    def on_sort_change(self) -> None:
+        """下拉选择 → 映射回内部键（文案随语言变，逻辑只看键）。"""
+        idx = self.cb_sort.current()
+        if 0 <= idx < len(SORT_KEYS):
+            self.v_sort.set(SORT_KEYS[idx])
+        elif self.v_sort.get() not in SORT_KEYS:
+            self.v_sort.set("date_desc")
+        self.on_filter_change()
 
     def on_kind_change(self, val: str) -> None:
         if self.v_kind.get() == val:
@@ -498,24 +602,31 @@ class CacheApp:
         # 第一行：选择操作 + 保存设置
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
         r1.pack(fill="x")
-        self.l_count = ttk.Label(r1, text="未选择", style="Count.TLabel", width=18)
+        # l_count / b_save 的文本由 update_count() 拥有，故用 t() 设初值但不登记
+        self.l_count = ttk.Label(r1, text=t("cache.bottom.count_none"),
+                                 style="Count.TLabel", width=26)
         self.l_count.pack(side="left", padx=(0, 12))
-        ttk.Button(r1, text="全选", command=self.on_select_all).pack(side="left", padx=(0, 8))
-        ttk.Button(r1, text="反选", command=self.on_invert).pack(side="left", padx=(0, 8))
-        ttk.Button(r1, text="清除", command=self.on_clear_sel).pack(side="left")
+        self._T(ttk.Button(r1, command=self.on_select_all), "common.select_all").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r1, command=self.on_invert), "common.invert").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r1, command=self.on_clear_sel), "common.clear").pack(side="left")
 
         self.v_bydate = tk.BooleanVar(value=False)
-        ttk.Checkbutton(r1, text="按日期分文件夹", variable=self.v_bydate).pack(side="right")
+        self._T(ttk.Checkbutton(r1, variable=self.v_bydate),
+                "cache.bottom.bydate").pack(side="right")
 
         # 第二行：保存目标 + 主按钮（左边缘与上一区对齐）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
         r2.pack(fill="x", pady=(10, 0))
-        ttk.Label(r2, text="保存到", style="Field.TLabel", width=10).pack(side="left")
+        self._T(ttk.Label(r2, style="Field.TLabel", width=14),
+                "cache.bottom.out_label").pack(side="left")
         self.e_out = ttk.Entry(r2)
         self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
-        ttk.Button(r2, text="浏览…", command=self.on_pick_out).pack(side="left", padx=(0, 8))
-        ttk.Button(r2, text="打开目录", command=self.on_open_out).pack(side="left")
-        self.b_save = ttk.Button(r2, text="保存选中", style="Accent.TButton",
+        self._T(ttk.Button(r2, command=self.on_pick_out), "common.browse").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r2, command=self.on_open_out), "common.open_dir").pack(side="left")
+        self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
                                  command=self.on_save)
         self.b_save.pack(side="left", padx=(12, 0))
 
@@ -540,7 +651,7 @@ class CacheApp:
     def _build_statusbar(self) -> None:
         wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 7, 16, 7))
         wrap.pack(fill="x", side="bottom")
-        self.l_status = ttk.Label(wrap, text="就绪", style="Status.TLabel")
+        self.l_status = ttk.Label(wrap, text=t("common.ready"), style="Status.TLabel")
         self.l_status.pack(side="left")
         # 进度条只在任务进行时出现，常态不占位（避免"像个空输入框"）
         self.pb = ttk.Progressbar(wrap, mode="determinate", maximum=100,
@@ -606,6 +717,13 @@ class CacheApp:
                 continue
         return ""
 
+    @staticmethod
+    def _migrate_sort(value: str) -> str:
+        """旧配置里存的是中文排序文案；迁移为内部键（已是键则原样返回）。"""
+        if value in SORT_KEYS:
+            return value
+        return _LEGACY_SORT.get(value, "date_desc")
+
     def _load_config(self) -> None:
         cfg = load_config()
         tdata = cfg.get("tdata") or ""
@@ -614,13 +732,15 @@ class CacheApp:
         self.e_tdata.delete(0, "end")
         self.e_tdata.insert(0, tdata)
 
-        out = cfg.get("out_dir") or str(HERE / "挑选保存")
+        out = cfg.get("out_dir") or str(HERE / t("cache.default_out_dir"))
         self.e_out.delete(0, "end")
         self.e_out.insert(0, out)
         if cfg.get("kind"):
             self.v_kind.set(cfg["kind"])
         if cfg.get("sort"):
-            self.cb_sort.set(cfg["sort"])
+            self.v_sort.set(self._migrate_sort(str(cfg["sort"])))
+        # 下拉回显当前键对应的文案（语言切换时由 retranslate 重设）
+        self.cb_sort.set(t(f"sort.{self.v_sort.get()}"))
         if cfg.get("by_date") is not None:
             self.v_bydate.set(bool(cfg["by_date"]))
 
@@ -636,7 +756,7 @@ class CacheApp:
             return
         tdata = Path(self.e_tdata.get().strip())
         if not tdata.is_dir():
-            messagebox.showwarning(APP_NAME, "tdata 目录不存在，请检查路径")
+            messagebox.showwarning(_app_title(), t("cache.dialog.no_tdata"))
             return
         self.busy = True
         self.cancel.clear()
@@ -649,16 +769,18 @@ class CacheApp:
             try:
                 entries, stats = load_cache(
                     tdata, passcode,
-                    progress_cb=lambda i, t, txt: self.ui_q.put(("load_progress", i, t, txt)),
+                    progress_cb=lambda i, tot, txt: self.ui_q.put(("load_progress", i, tot, txt)),
                     cancel_event=self.cancel,
                 )
                 self.ui_q.put(("load_done", tdata, entries, stats, passcode, time.time() - t0))
             except cs.PasscodeRequired as exc:
-                self.ui_q.put(("load_error", "需要密码", str(exc)))
+                # 只传语言键，由主线程渲染，避免工作线程在切换语言瞬间取到半新状态
+                self.ui_q.put(("load_error", "cache.dialog.need_passcode_title", str(exc)))
             except cs.CacheError as exc:
-                self.ui_q.put(("load_error", "读取失败", str(exc)))
+                self.ui_q.put(("load_error", "cache.dialog.load_failed_title", str(exc)))
             except Exception as exc:  # pragma: no cover
-                self.ui_q.put(("load_error", "读取失败", f"{exc.__class__.__name__}: {exc}"))
+                self.ui_q.put(("load_error", "cache.dialog.load_failed_title",
+                               f"{exc.__class__.__name__}: {exc}"))
 
         threading.Thread(target=work, daemon=True).start()
 
@@ -713,14 +835,14 @@ class CacheApp:
         if kw:
             items = [it for it in items if kw in it.name.lower() or kw in it.entry.rel.lower()]
 
-        sort = self.cb_sort.get()
-        if sort == "日期 新→旧":
+        sort = self.v_sort.get()
+        if sort == "date_desc":
             items.sort(key=lambda x: x.mtime, reverse=True)
-        elif sort == "日期 旧→新":
+        elif sort == "date_asc":
             items.sort(key=lambda x: x.mtime)
-        elif sort == "大小 大→小":
+        elif sort == "size_desc":
             items.sort(key=lambda x: x.size, reverse=True)
-        elif sort == "大小 小→大":
+        elif sort == "size_asc":
             items.sort(key=lambda x: x.size)
         else:
             items.sort(key=lambda x: (x.entry.label, x.entry.rel))
@@ -827,7 +949,7 @@ class CacheApp:
         cell["tag"] = self.canvas.create_polygon(
             0, 0, 0, 0, fill="#0d0d10", outline="", state="hidden", smooth=False)
         cell["tag_txt"] = self.canvas.create_text(
-            0, 0, anchor="center", text="视频", fill="#e8e8ec",
+            0, 0, anchor="center", text=t("cell.video_tag"), fill="#e8e8ec",
             font=(FONT, 8), state="hidden")
         # 选中徽标：圆底 + 对勾
         cell["badge"] = self.canvas.create_oval(
@@ -1225,11 +1347,13 @@ class CacheApp:
         if idx is not None and idx < len(self.items):
             it = self.items[idx]
             self.set_status(
-                f"{it.name}　·　{human_size(it.size)}　·　"
-                f"{datetime.fromtimestamp(it.mtime):%Y-%m-%d %H:%M}　·　来源 {it.entry.label}"
+                "cache.status.hover",
+                name=it.name, size=human_size(it.size),
+                time=f"{datetime.fromtimestamp(it.mtime):%Y-%m-%d %H:%M}",
+                label=it.entry.label,
             )
         else:
-            self.set_status(self._default_status())
+            self.set_status("cache.status.default", n=self.thumbs_ready)
 
     def _on_leave(self, event) -> None:
         if self.hover_slot is not None:
@@ -1238,12 +1362,12 @@ class CacheApp:
             cell = self.cells_by_slot.get(prev)
             if cell is not None:
                 self._place_cell(cell, prev, prev % self.columns, prev // self.columns)
-        self.set_status(self._default_status())
+        self.set_status("cache.status.default", n=self.thumbs_ready)
 
     def on_preview(self, it: Item) -> None:
         tdata = Path(self.e_tdata.get().strip())
         passcode = self.e_pass.get()
-        self.set_status(f"正在解密预览 {it.name} …")
+        self.set_status("cache.status.preview_decrypting", name=it.name)
 
         def work():
             try:
@@ -1290,11 +1414,12 @@ class CacheApp:
                 total += it.size
                 n += 1
         if n:
-            self.l_count.configure(text=f"已选 {n} 个　{human_size(total)}")
-            self.b_save.configure(text=f"保存选中（{n}）")
+            self.l_count.configure(
+                text=t("cache.bottom.count_selected", n=n, size=human_size(total)))
+            self.b_save.configure(text=t("cache.bottom.save_n", n=n))
         else:
-            self.l_count.configure(text="未选择")
-            self.b_save.configure(text="保存选中")
+            self.l_count.configure(text=t("cache.bottom.count_none"))
+            self.b_save.configure(text=t("cache.bottom.save_none"))
         self._update_header()
 
     def _update_header(self) -> None:
@@ -1302,14 +1427,10 @@ class CacheApp:
         if not self.all_items:
             self.l_header_stat.configure(text="")
             return
-        kind_cn = {"image": "图片", "video": "视频", "all": "全部"}.get(self.v_kind.get(), "")
         self.l_header_stat.configure(
-            text=f"{kind_cn} {len(self.items)} / 共 {len(self.all_items)}"
+            text=t("cache.status.header", kind=t(f"kind.{self.v_kind.get()}"),
+                   shown=len(self.items), total=len(self.all_items))
         )
-
-    def _default_status(self) -> str:
-        return (f"缩略图已载入 {self.thumbs_ready}　·　"
-                f"单击选中，Shift+单击连选，双击预览")
 
     # ------------------------- 保存 -------------------------
     def on_pick_out(self) -> None:
@@ -1323,17 +1444,17 @@ class CacheApp:
         if out and Path(out).is_dir():
             os.startfile(out)
         else:
-            messagebox.showinfo(APP_NAME, "输出目录还不存在，保存后会自动创建")
+            messagebox.showinfo(_app_title(), t("cache.dialog.out_missing"))
 
     def on_save(self) -> None:
         if self.busy:
             return
         if not self.selected:
-            messagebox.showinfo(APP_NAME, "还没有选中任何内容\n\n在缩略图上单击即可选中（变蓝打勾）")
+            messagebox.showinfo(_app_title(), t("cache.dialog.nothing_selected"))
             return
         out = self.e_out.get().strip()
         if not out:
-            messagebox.showwarning(APP_NAME, "请先选择保存到的目录")
+            messagebox.showwarning(_app_title(), t("cache.dialog.no_out_dir"))
             return
         tdata = Path(self.e_tdata.get().strip())
         by_rel = {str(it.entry.rel): it for it in self.all_items}
@@ -1342,10 +1463,10 @@ class CacheApp:
             return
         total_size = sum(it.size for it in items)
         if not messagebox.askyesno(
-            APP_NAME,
-            f"将保存 {len(items)} 个文件（约 {human_size(total_size)}）到：\n{out}\n\n"
-            + ("（按日期分文件夹）\n" if self.v_bydate.get() else "")
-            + "原 tdata 缓存不会被改动。",
+            _app_title(),
+            t("cache.dialog.confirm_save", n=len(items), size=human_size(total_size),
+              out=out,
+              by_date=t("cache.dialog.confirm_save_bydate") if self.v_bydate.get() else ""),
         ):
             return
 
@@ -1361,12 +1482,13 @@ class CacheApp:
                 reader = self.reader or cs.CacheReader(tdata, passcode)
                 ok, fail = save_items(
                     items, Path(out), tdata, passcode, by_date=by_date,
-                    progress_cb=lambda d, t, n: self.ui_q.put(("save_progress", d, t, n)),
+                    progress_cb=lambda d, tot, n: self.ui_q.put(("save_progress", d, tot, n)),
                     cancel_event=self.cancel, reader=reader,
                 )
                 self.ui_q.put(("save_done", Path(out), ok, fail))
             except Exception as exc:  # pragma: no cover
-                self.ui_q.put(("load_error", "保存失败", f"{exc.__class__.__name__}: {exc}"))
+                self.ui_q.put(("load_error", "cache.dialog.save_failed_title",
+                               f"{exc.__class__.__name__}: {exc}"))
                 self.ui_q.put(("save_done", Path(out), 0, len(items)))
 
         threading.Thread(target=work, daemon=True).start()
@@ -1387,7 +1509,8 @@ class CacheApp:
         if kind == "load_progress":
             _, i, total, txt = msg
             self._show_progress((i / total * 100) if total else 0)
-            self.set_status(txt)
+            # 进度文案由 cache_source 生成，每个文件都会刷新，故不走"重放"
+            self.set_status_raw(txt)
         elif kind == "load_done":
             _, tdata, entries, stats, passcode, elapsed = msg
             self.tdata = tdata
@@ -1401,56 +1524,74 @@ class CacheApp:
             self.update_count()          # 同步顶栏概览与计数
             reused = stats["reused"]
             self.set_status(
-                f"读取完成：媒体 {stats['ok']} 个"
-                + (f"（复用 {reused}）" if reused else "")
-                + f"　·　跳过 {stats['skipped']}　·　失败 {stats['failed']}"
-                + f"　·　耗时 {elapsed:.1f}s"
+                "cache.status.load_done",
+                ok=stats["ok"],
+                reused=t("cache.status.reused", n=reused) if reused else "",
+                skipped=stats["skipped"], failed=stats["failed"],
+                elapsed=f"{elapsed:.1f}",
             )
             save_config({"tdata": str(tdata)})
             if not entries:
-                messagebox.showinfo(
-                    APP_NAME,
-                    "没有解析出可用的媒体。\n\n"
-                    "请先在 Telegram Desktop 里查看/播放你想保存的内容，再回来点“重新扫描”。",
-                )
+                messagebox.showinfo(_app_title(), t("cache.dialog.no_media"))
         elif kind == "load_error":
-            _, title, detail = msg
+            _, title_key, detail = msg
             self.busy = False
             self.set_busy(False)
             self._hide_progress()
-            messagebox.showerror(APP_NAME, f"{title}\n\n{detail}")
-            self.set_status(f"{title}：{detail}")
+            messagebox.showerror(_app_title(), f"{t(title_key)}\n\n{detail}")
+            self.set_status_error(title_key, detail)
         elif kind == "preview":
             _, path, err = msg
             if err:
-                messagebox.showerror(APP_NAME, f"预览失败：{err}")
-                self.set_status("预览失败")
+                messagebox.showerror(_app_title(), t("cache.dialog.preview_failed_body", err=err))
+                self.set_status("cache.status.preview_failed")
             else:
                 try:
                     os.startfile(path)
-                    self.set_status(f"已解密预览：{Path(path).name}")
+                    self.set_status("cache.status.preview_done", name=Path(path).name)
                 except Exception as exc:
-                    messagebox.showerror(APP_NAME, f"无法打开：{exc}")
+                    messagebox.showerror(_app_title(), t("cache.dialog.cannot_open", exc=exc))
         elif kind == "save_progress":
-            _, d, t, n = msg
-            self._show_progress((d / t * 100) if t else 0)
-            self.set_status(f"保存中 {d}/{t} · {n}")
+            _, d, tot, n = msg
+            self._show_progress((d / tot * 100) if tot else 0)
+            self.set_status("cache.status.saving", done=d, total=tot, name=n)
         elif kind == "save_done":
             _, out, ok, fail = msg
             self.busy = False
             self.set_busy(False)
             self._hide_progress()
-            self.set_status(f"保存完成：成功 {ok}，失败 {fail}")
-            if messagebox.askyesno(APP_NAME, f"保存完成：成功 {ok}，失败 {fail}。\n\n是否打开输出目录？"):
+            self.set_status("cache.status.save_done", ok=ok, fail=fail)
+            if messagebox.askyesno(_app_title(),
+                                   t("cache.dialog.save_done_ask", ok=ok, fail=fail)):
                 try:
                     os.startfile(str(out))
                 except Exception as exc:
-                    messagebox.showwarning(APP_NAME, f"打开失败：{exc}")
+                    messagebox.showwarning(_app_title(), t("cache.dialog.open_failed", exc=exc))
             save_config({"out_dir": str(out), "kind": self.v_kind.get(),
-                         "sort": self.cb_sort.get(), "by_date": bool(self.v_bydate.get())})
+                         "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
 
-    def set_status(self, text: str) -> None:
+    # ------------------------- 状态栏 -------------------------
+    def set_status(self, key: str, **kw) -> None:
+        """设置状态栏文案（记下 key+参数，切换语言时按新语言重放）。"""
+        self._status_fn = (lambda k=key, a=dict(kw): t(k, **a))
+        self.l_status.configure(text=self._status_fn())
+
+    def set_status_error(self, key: str, detail: str) -> None:
+        """错误状态：标题也是语言键，切换语言时一并重算。"""
+        self._status_fn = (lambda k=key, d=detail: t("cache.status.err", title=t(k), detail=d))
+        self.l_status.configure(text=self._status_fn())
+
+    def set_status_raw(self, text: str) -> None:
+        """即席文本（不参与语言重放）。"""
+        self._status_fn = None
         self.l_status.configure(text=text)
+
+    def _render_status(self) -> None:
+        """按当前语言重放状态栏；无重放内容且空闲时回到默认提示。"""
+        if self._status_fn is not None:
+            self.l_status.configure(text=self._status_fn())
+        elif not self.busy:
+            self.set_status("cache.status.default", n=self.thumbs_ready)
 
     def set_busy(self, busy: bool) -> None:
         state = "disabled" if busy else "normal"

@@ -12,6 +12,7 @@ from pathlib import Path
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
 import cache_picker as cp
+import i18n
 
 LOG = Path(sys.argv[1]) if len(sys.argv) > 1 else _HERE / "_smoketest_cache_log.txt"
 LOG.write_text("", encoding="utf-8")
@@ -138,6 +139,38 @@ def poll():
             app.on_clear_sel()
             log(f"[OK] 清空 → {app.l_count.cget('text')}")
             log(f"[OK] 最终图元池大小 {len(app.cell_pool)}（复用生效）")
+        state["phase"] = 5
+        root.after(300, poll)
+        return
+
+    if state["phase"] == 5:
+        # 语言切换：只调 set_language（不调 on_lang_change，避免改写用户的语言偏好）。
+        # 先强制回到中文，使起点确定，不依赖本机已保存的语言偏好。
+        i18n.set_language("zh")
+        before_sort = app.v_sort.get()
+        zh_count = app.l_count.cget("text")
+        if zh_count != i18n.t("cache.bottom.count_none"):
+            return fail(f"中文下计数标签异常：{zh_count}")
+
+        i18n.set_language("en")
+        vals = list(app.cb_sort["values"])
+        log(f"[OK] 切英文：排序选项 {vals}")
+        if vals != [i18n.t(f"sort.{k}") for k in cp.SORT_KEYS]:
+            return fail("排序下拉未按英文刷新")
+        if app.v_sort.get() != before_sort:
+            return fail(f"切换语言不应改变排序内部键：{before_sort} → {app.v_sort.get()}")
+        en_count = app.l_count.cget("text")
+        log(f"[OK] 切英文：计数 {en_count}，主按钮 {app.b_save.cget('text')}")
+        if en_count != i18n.t("cache.bottom.count_none"):
+            return fail(f"计数标签未按英文刷新：{en_count}")
+        if en_count == zh_count:
+            return fail("英文计数与中文相同（未翻译？）")
+        if app.b_save.cget("text") != i18n.t("cache.bottom.save_none"):
+            return fail("主按钮未按英文刷新")
+        app.apply_filter_sort()          # 英文下排序逻辑仍可用
+        log(f"[OK] 英文下排序仍可用，共 {len(app.items)} 项")
+        i18n.set_language("zh")
+        log(f"[OK] 切回中文：计数 {app.l_count.cget('text')}")
         log("缓存版 GUI 测试全部通过 ✅")
         root.destroy()
         return

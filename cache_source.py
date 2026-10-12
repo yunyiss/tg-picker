@@ -31,6 +31,8 @@ from pathlib import Path
 
 from PIL import Image, ImageFile
 
+from i18n import t
+
 # 缓存里可能存在"只缓存了一部分"的媒体，允许截断解码以尽量出图
 ImageFile.LOAD_TRUNCATED_IMAGES = True
 
@@ -71,7 +73,7 @@ def unique_path(path: Path) -> Path:
         cand = path.with_name(f"{stem} ({i}){suffix}")
         if not cand.exists():
             return cand
-    raise RuntimeError(f"命名冲突过多，无法为 {path.name} 找到可用名字")
+    raise RuntimeError(t("cs.err_name_conflict", name=path.name))
 
 
 # Windows：GUI 通过 pythonw.exe（无控制台）启动时，每次调用 ffmpeg.exe
@@ -251,12 +253,7 @@ def _import_decryptor():
     """导入解密模块（内置副本优先）。"""
     src = find_decryptor_src()
     if src is None:
-        raise CacheError(
-            "找不到解密模块。\n\n"
-            "本工具自带 _vendor/tg_scoop，正常不应缺失；"
-            "请确认 tg-picker\\_vendor\\tg_scoop\\cache_decryptor.py 存在，"
-            "或设置环境变量 TG_SCOOP_SRC 指向包含 tg_scoop 包的目录。"
-        )
+        raise CacheError(t("cs.err_no_decryptor"))
     if str(src) not in sys.path:
         sys.path.insert(0, str(src))
     try:
@@ -268,7 +265,7 @@ def _import_decryptor():
         from tg_scoop.exceptions import PasswordRequiredError
         from tg_scoop.tdata_reader import TdataReader
     except Exception as exc:  # pragma: no cover
-        raise CacheError(f"导入 tg-scoop 解密模块失败：{exc}") from exc
+        raise CacheError(t("cs.err_import", exc=exc)) from exc
     return (
         TdataReader,
         CacheDecryptor,
@@ -326,7 +323,7 @@ class CacheReader:
     def __init__(self, tdata: Path, passcode: str = "") -> None:
         tdata = Path(tdata)
         if not tdata.is_dir():
-            raise CacheError(f"tdata 目录不存在：{tdata}")
+            raise CacheError(t("cs.err_tdata_missing", tdata=tdata))
         (
             TdataReader,
             CacheDecryptor,
@@ -341,10 +338,7 @@ class CacheReader:
         try:
             local_key = self._reader.read_local_key(passcode)
         except PasswordRequiredError as exc:
-            raise PasscodeRequired(
-                "该 tdata 设有本地锁定密码（Telegram 设置→隐私与安全→锁定密码），"
-                "请填写密码后重试"
-            ) from exc
+            raise PasscodeRequired(t("cs.err_passcode")) from exc
         self._decryptor = CacheDecryptor(local_key)
 
     def cache_roots(self) -> list[Path]:
@@ -385,7 +379,7 @@ class CacheReader:
     def decrypt(self, path: Path) -> bytes:
         """完整解密一个缓存文件。"""
         if path.stat().st_size > MAX_DECRYPT_BYTES:
-            raise CacheError(f"文件过大，已跳过：{path.name}")
+            raise CacheError(t("cs.err_too_large", name=path.name))
         return self._decryptor.decrypt_file(path)
 
     def read_head_and_size(self, path: Path, head_bytes: int = HEAD_BYTES) -> tuple[bytes, int]:
@@ -458,7 +452,7 @@ def prepare(
         if cancel_event is not None and cancel_event.is_set():
             break
         if progress_cb is not None:
-            progress_cb(i, total, f"解析缓存 {i}/{total}")
+            progress_cb(i, total, t("cs.progress_parse", i=i, total=total))
 
         rec = old.get(ent.rel)
         key = hashlib.md5(ent.rel.encode("utf-8", "replace")).hexdigest()

@@ -1,5 +1,7 @@
 # tg-picker —— 绕过 Telegram「禁止保存」的图片挑选器
 
+> 🌐 语言 / Language：**中文** ｜ [English](README.en.md)
+
 Telegram 的群组/频道可以开启 **「禁止保存」**（Restrict Saving Content），
 开启后官方客户端会隐藏保存与转发按钮，图片视频只能看、存不下来。
 
@@ -145,12 +147,15 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `cache_source.py` | 缓存解密与读取（TDEF、索引、缩略图缓存、抽帧） |
 | `cache_picker.py` | **缓存挑选器** GUI（方法①） |
 | `tg_picker.py` | 在线挑选器 GUI（方法②，Telethon） |
+| `i18n.py` | 国际化内核：载入语言资源、`t(key)` 取词、切换语言并通知界面刷新 |
+| `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run_cache.cmd` / `run.cmd` | 两个启动脚本 |
 | `requirements.txt` | 依赖清单 |
 | `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
-| `CHANGELOG.md` | 变更记录 |
-| `_selftest_*.py` | 功能自检（可在真实数据上跑） |
+| `CHANGELOG.md` | 变更记录（中文） |
+| `README.en.md` | 本说明的英文版 |
+| `_selftest_*.py` | 功能自检（可在真实数据上跑；`_selftest_i18n.py` 无需 tdata） |
 | `_smoketest_*.py` | GUI 冒烟测试 |
 
 **运行时自动生成、不入版本库**：
@@ -162,6 +167,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `preview/` | 双击预览的临时文件（可删） |
 | `tmp_video/` | 视频抽帧临时目录（自动清理） |
 | `cache_config.json` | 记住上次的路径与偏好 |
+| `language.json` | 语言偏好（两个工具共享） |
 | `tg_picker.session`、`config.json` | 在线挑选器的会话与凭据（**勿外传**） |
 
 ---
@@ -184,3 +190,84 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 缓存挑选器只提取**已经缓存到你自己硬盘上**的数据；
 在线挑选器只用你自己的账号读取你本就能看到的内容。
 请遵守所在地区法律与内容所有者设定的规则。
+
+---
+
+## 七、多语言（i18n）
+
+两个界面都内置**中文 / 英文**双语，**默认中文**。右上角有 `中文 ｜ English`
+分段按钮，点击后**整个界面立即切换**（按钮、标签、排序下拉、状态栏、各类对话框
+都会实时更新），不需要重启。
+
+### 语言偏好存在哪
+
+语言偏好保存在项目根目录的 **`language.json`**：
+
+```json
+{ "lang": "zh" }
+```
+
+它是两个工具**共享**的——在缓存挑选器里切到英文，再打开在线挑选器也是英文。
+该文件属运行时本地配置，已加入 `.gitignore`，不进版本库；删除后回到默认中文。
+
+### 语言资源文件
+
+用户可见文案全部集中在这两个文件里，键名用**点号命名空间**（如 `cache.setup.browse`）：
+
+```
+locales/zh.json     中文（默认语言，键最全）
+locales/en.json     英文（键集合与 zh.json 严格一致）
+```
+
+取值可含命名占位符，由 `t()` 做格式化。两个文件用的是**同一个键**、不同语言的值：
+
+`locales/zh.json`
+
+```json
+{ "cache.bottom.count_selected": "已选 {n} 个　{size}" }
+```
+
+`locales/en.json`
+
+```json
+{ "cache.bottom.count_selected": "Selected {n} · {size}" }
+```
+
+代码里取词统一走 `i18n.t("键名", 参数=值)`：
+
+```python
+from i18n import t
+self.b_save.configure(text=t("cache.bottom.save_n", n=3))   # → 保存选中（3）
+```
+
+`t()` 永远不会抛错：当前语言缺该键时回退默认语言（中文），再缺则原样返回键名。
+
+### 新增一种语言（例如日语）
+
+无需改动任何业务代码，三步即可：
+
+1. **复制** `locales/zh.json` 为 `locales/ja.json`，逐条翻译**值**（**键名不要改**）；
+2. 在 `i18n.py` 顶部的 `LANGUAGES` 里登记语言码与显示名：
+
+   ```python
+   LANGUAGES = {"zh": "中文", "en": "English", "ja": "日本語"}
+   ```
+
+3. 运行自检确认没有漏翻或占位符写错：
+
+   ```cmd
+   .venv\Scripts\python.exe _selftest_i18n.py
+   ```
+
+自检会校验：两份资源键集合一致、每条取值的 `{}` 占位符一致且非空、源码里所有
+`t("...")` 的键都有资源、切换语言时界面通知正常，并在**英文模式下遍历两个界面的
+控件树（含下拉框与画布文字）**，确认没有任何中文残留。
+
+### 说明
+
+- 未引入任何第三方本地化依赖（不用 gettext / `.po` / `.mo`），纯 JSON + 标准库。
+- 内部标识**不参与翻译**：媒体类型取值 `image/video/photo/file`、缓存文件名前缀
+  `tg_`、扩展名、按日期分目录的 `YYYY-MM-DD` 格式等，保证既有配置与测试都兼容。
+- 旧版 `cache_config.json` 里以中文文本保存的排序项（如 `"日期 新→旧"`）会在读取时
+  自动迁移成内部键（`date_desc`），无需手工改配置。
+- `run.cmd` / `run_cache.cmd` 在虚拟环境缺失时的提示为中英同行显示。

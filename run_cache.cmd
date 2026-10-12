@@ -4,8 +4,8 @@ setlocal
 cd /d "%~dp0"
 
 if not exist ".venv\Scripts\pythonw.exe" (
-    echo [错误] 未找到虚拟环境 .venv
-    echo 请先执行：
+    echo [错误/Error] 未找到虚拟环境 .venv / virtual environment .venv not found
+    echo 请先执行 / please run the following first:
     echo     python -m venv .venv
     echo     .venv\Scripts\pip install -r requirements.txt
     pause

@@ -32,11 +32,20 @@ assert "1" in app.b_dl.cget("text"), app.b_dl.cget("text")
 app.toggle_item(it)
 assert it.selected is False
 
+# 语言切换：只调 set_language（不调 on_lang_change，避免改写用户的语言偏好）
+import i18n
+i18n.set_language("en")
+assert app.b_dl.cget("text") == i18n.t("online.download_btn", n=0), app.b_dl.cget("text")
+assert app.l_login.cget("text") == i18n.t("online.login.not_logged")
+assert app.b_dl.cget("text") == "Download selected (0)", app.b_dl.cget("text")
+i18n.set_language("zh")
+assert app.l_login.cget("text") == i18n.t("online.login.not_logged")
+
 # 验证 prompt 分支能显示并回填
 import threading
 res = {}
 def ask_later():
-    res["v"] = app.worker.prompter.ask("code", "测试验证码：")
+    res["v"] = app.worker.prompter.ask("code", "online.prompt.code", phone="+8613800000000")
 threading.Thread(target=ask_later, daemon=True).start()
 root.after(600, lambda: (app.e_prompt.insert(0, "12345"), app.on_prompt_submit()))
 

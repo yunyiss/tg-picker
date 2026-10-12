@@ -39,11 +39,18 @@ from telethon.tl.types import (
     MessageMediaPhoto,
 )
 
-APP_NAME = "TG 图片挑选下载器"
+import i18n
+from i18n import t
+
 APP_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = APP_DIR / "config.json"
 SESSION_PATH = str(APP_DIR / "tg_picker_session")
 DEFAULT_OUT = APP_DIR / "downloads"
+
+
+def _app_title() -> str:
+    """窗口标题（同时用作所有对话框的标题）。"""
+    return t("app.online_title")
 
 # 界面配色（深色，接近 Telegram）
 BG = "#1e1e1e"
@@ -97,7 +104,7 @@ def unique_path(path: Path) -> Path:
         cand = path.with_name(f"{stem} ({i}){suffix}")
         if not cand.exists():
             return cand
-    raise RuntimeError(f"命名冲突过多: {path}")
+    raise RuntimeError(t("online.err_name_conflict", path=path))
 
 
 def classify(msg) -> str | None:
@@ -183,6 +190,7 @@ class MediaItem:
     cell: object = None           # 单元格 Frame
     img_label: object = None
     mark_label: object = None
+    thumb_failed: bool = False    # 缩略图确实取不到（用于语言切换时刷新"无预览"）
 
 
 # --------------------------------------------------------------------------
@@ -196,11 +204,15 @@ class Prompter:
         self._event = threading.Event()
         self._value: str | None = None
 
-    def ask(self, kind: str, text: str) -> str | None:
-        """后台线程调用：发请求并阻塞等待 GUI 回填。"""
+    def ask(self, kind: str, key: str, **kw) -> str | None:
+        """后台线程调用：发请求并阻塞等待 GUI 回填。
+
+        传的是**语言键 + 参数**而不是成文文案，这样界面切换语言时能按
+        新语言重渲染这条待填写的提示。
+        """
         self._event.clear()
         self._value = None
-        self.ui_q.put(("prompt", kind, text))
+        self.ui_q.put(("prompt", kind, key, kw))
         self._event.wait()
         return self._value
 
@@ -227,14 +239,16 @@ class Worker:
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
 
-    def submit(self, coro, label: str = "任务") -> None:
+    def submit(self, coro, label: str | None = None) -> None:
+        label = label or t("online.task.default")
         fut = asyncio.run_coroutine_threadsafe(coro, self.loop)
 
         def _done(f):
             try:
                 f.result()
             except Exception as exc:  # 理论上协程内部已捕获，这里是兜底
-                self.ui_q.put(("log", f"[{label}] 异常: {exc.__class__.__name__}: {exc}"))
+                self.ui_q.put(("log", t("online.log.submit_err", label=label,
+                                        name=exc.__class__.__name__, exc=exc)))
                 self.ui_q.put(("log", traceback.format_exc()))
                 self.ui_q.put(("busy", False))
 
@@ -246,16 +260,16 @@ class Worker:
     # ----- 登录 -----
     async def login(self, api_id: int, api_hash: str, phone: str) -> None:
         try:
-            self.post("log", f"正在连接 Telegram（api_id={api_id}）…")
+            self.post("log", t("online.log.connecting", api_id=api_id))
             self.client = TelegramClient(SESSION_PATH, api_id, api_hash)
             await self.client.connect()
 
             if not await self.client.is_user_authorized():
-                self.post("log", "该会话尚未登录，正在请求验证码…")
+                self.post("log", t("online.log.requesting_code"))
                 sent = await self.client.send_code_request(phone)
-                code = self.prompter.ask("code", f"验证码已发送到 {phone}，请在下方输入：")
+                code = self.prompter.ask("code", "online.prompt.code", phone=phone)
                 if not code:
-                    self.post("log", "已取消登录。")
+                    self.post("log", t("online.log.cancelled"))
                     self.post("busy", False)
                     return
                 try:
@@ -263,26 +277,28 @@ class Worker:
                         phone=phone, code=code.strip(), phone_code_hash=sent.phone_code_hash
                     )
                 except errors.SessionPasswordNeededError:
-                    pw = self.prompter.ask("password", "该账号开启了两步验证，请输入密码：")
+                    pw = self.prompter.ask("password", "online.prompt.password")
                     if not pw:
-                        self.post("log", "已取消登录。")
+                        self.post("log", t("online.log.cancelled"))
                         self.post("busy", False)
                         return
                     await self.client.sign_in(password=pw)
 
             me = await self.client.get_me()
             who = " ".join(x for x in [getattr(me, "first_name", None), getattr(me, "last_name", None)] if x)
-            self.post("log", f"登录成功：{who or '（无名）'} @{getattr(me, 'username', None) or '-'}")
+            self.post("log", t("online.log.login_ok", who=who or t("online.log.unnamed"),
+                               username=getattr(me, "username", None) or "-"))
             save_config({"api_id": api_id, "api_hash": api_hash, "phone": phone})
             self.post("logged_in", who)
         except errors.PhoneCodeInvalidError:
-            self.post("log", "验证码错误，请重新点击登录。")
+            self.post("log", t("online.log.code_invalid"))
         except errors.PhoneCodeExpiredError:
-            self.post("log", "验证码已过期，请重新点击登录。")
+            self.post("log", t("online.log.code_expired"))
         except errors.PasswordHashInvalidError:
-            self.post("log", "两步验证密码错误，请重新登录。")
+            self.post("log", t("online.log.password_invalid"))
         except Exception as exc:
-            self.post("log", f"登录失败：{exc.__class__.__name__}: {exc}")
+            self.post("log", t("online.log.login_failed",
+                               name=exc.__class__.__name__, exc=exc))
         finally:
             self.post("busy", False)
 
@@ -290,7 +306,7 @@ class Worker:
     async def _resolve(self, chat: str):
         raw = (chat or "").strip()
         if not raw:
-            raise ValueError("请填写群/频道")
+            raise ValueError(t("online.log.need_chat"))
         # 从链接里抠出标识
         m = re.search(r"(?:t\.me|telegram\.me)/(?:joinchat/|\+)?([^/?#\s]+)", raw, re.I)
         invite = None
@@ -303,7 +319,7 @@ class Worker:
         if raw.startswith("@"):
             raw = raw[1:]
         if invite:
-            self.post("log", f"检测到邀请链接，尝试加入会话…")
+            self.post("log", t("online.log.invite"))
             try:
                 res = await self.client(functions.messages.ImportChatInviteRequest(hash=invite))
                 return res.chats[0] if getattr(res, "chats", None) else await self.client.get_entity(raw)
@@ -323,12 +339,14 @@ class Worker:
         """持续翻页直到收集到 target 个目标类型媒体（或消息耗尽）。"""
         try:
             if self.client is None or not await self.client.is_user_authorized():
-                self.post("log", "请先登录。")
+                self.post("log", t("online.log.need_login"))
                 self.post("busy", False)
                 return
             self.cancel.clear()
             entity = await self._resolve(chat)
-            self.post("log", f"已定位会话：{getattr(entity, 'title', None) or getattr(entity, 'username', None) or entity.id}")
+            self.post("log", t("online.log.entity",
+                               title=getattr(entity, "title", None)
+                               or getattr(entity, "username", None) or entity.id))
 
             items: list[MediaItem] = []
             seen: set[int] = set()
@@ -364,7 +382,7 @@ class Worker:
                     )
                     if len(items) >= target:
                         break
-                self.post("log", f"扫描 {scanned} 条消息，已找到 {len(items)} 个媒体…")
+                self.post("log", t("online.log.scanning", scanned=scanned, found=len(items)))
                 if last_id is None:
                     break  # 本页没有可用消息，终止
                 cursor = last_id
@@ -372,21 +390,22 @@ class Worker:
                     break  # 已经到底
 
             if not items:
-                self.post("log", "该范围内没有符合筛选条件的媒体。")
+                self.post("log", t("online.log.no_match"))
             else:
-                self.post("log", f"本批共 {len(items)} 个媒体，开始生成缩略图…")
+                self.post("log", t("online.log.batch", n=len(items)))
             self.post("media_loaded", items, cursor, len(items) < target)
             await self.load_thumbs(items)
         except errors.UsernameNotOccupiedError:
-            self.post("log", "找不到该用户名。")
+            self.post("log", t("online.log.no_such_user"))
         except errors.ChannelPrivateError:
-            self.post("log", "无法访问该会话（私密或你未加入）。")
+            self.post("log", t("online.log.private"))
         except errors.ChatAdminRequiredError:
-            self.post("log", "需要管理员权限才能读取该会话。")
+            self.post("log", t("online.log.admin_required"))
         except ValueError as exc:
             self.post("log", str(exc))
         except Exception as exc:
-            self.post("log", f"加载失败：{exc.__class__.__name__}: {exc}")
+            self.post("log", t("online.log.load_failed",
+                               name=exc.__class__.__name__, exc=exc))
         finally:
             self.post("busy", False)
 
@@ -452,7 +471,7 @@ class Worker:
             except errors.FloodWaitError as exc:
                 if attempt == 2:
                     raise
-                self.post("log", f"触发限速，等待 {exc.seconds} 秒后重试…")
+                self.post("log", t("online.log.rate_wait", seconds=exc.seconds))
                 await asyncio.sleep(exc.seconds + 1)
         raise RuntimeError("unreachable")
 
@@ -463,28 +482,32 @@ class Worker:
             self.cancel.clear()
             total = len(items)
             ok = fail = 0
-            self.post("log", f"开始下载 {total} 个文件到 {out_dir}")
+            self.post("log", t("online.log.dl_start", n=total, out=out_dir))
             for idx, it in enumerate(items, 1):
                 if self.cancel.is_set():
-                    self.post("log", f"已取消：完成 {ok} 个，剩余 {total - idx + 1} 个未下载。")
+                    self.post("log", t("online.log.dl_cancel", ok=ok, left=total - idx + 1))
                     break
                 self.post("progress", idx - 1, total)
                 try:
                     path = await self._download_one(it, out_dir)
                     ok += 1
-                    self.post("log", f"[{idx}/{total}] ✓ {path.name}")
+                    self.post("log", t("online.log.dl_item_ok",
+                                       idx=idx, total=total, name=path.name))
                 except errors.FloodWaitError as exc:
                     fail += 1
-                    self.post("log", f"[{idx}/{total}] ✗ 限速未恢复（等 {exc.seconds}s），跳过")
+                    self.post("log", t("online.log.dl_item_flood",
+                                       idx=idx, total=total, seconds=exc.seconds))
                 except Exception as exc:
                     fail += 1
-                    self.post("log", f"[{idx}/{total}] ✗ {exc.__class__.__name__}: {exc}")
+                    self.post("log", t("online.log.dl_item_err", idx=idx, total=total,
+                                       name=exc.__class__.__name__, exc=exc))
                 self.post("progress", idx, total)
                 await asyncio.sleep(0.35)  # 温和控速，避免触发限流
-            self.post("log", f"下载结束：成功 {ok}，失败 {fail}。")
+            self.post("log", t("online.log.dl_done", ok=ok, fail=fail))
             self.post("download_done", out_dir, ok, fail)
         except Exception as exc:
-            self.post("log", f"下载中断：{exc.__class__.__name__}: {exc}")
+            self.post("log", t("online.log.dl_interrupted",
+                               name=exc.__class__.__name__, exc=exc))
         finally:
             self.post("busy", False)
 
@@ -494,11 +517,12 @@ class Worker:
             out_dir = Path(out_dir)
             out_dir.mkdir(parents=True, exist_ok=True)
             path = await self._download_one(it, out_dir)
-            self.post("log", f"已下载：{path}")
+            self.post("log", t("online.log.downloaded", path=path))
             if open_after:
                 self.post("open_file", str(path))
         except Exception as exc:
-            self.post("log", f"下载失败：{exc.__class__.__name__}: {exc}")
+            self.post("log", t("online.log.dl_single_failed",
+                               name=exc.__class__.__name__, exc=exc))
         finally:
             self.post("busy", False)
 
@@ -541,19 +565,30 @@ class App:
         self._thumb_done = 0
         self._thumb_total = 0
         self._resize_job = None
+        self.who = ""                 # 已登录显示名（供语言切换时重建标签）
+        self._prompt_spec = None      # 待填写的提示（语言键+参数），切换语言时重渲染
 
-        root.title(APP_NAME)
+        # i18n：先定语言再建界面（首次绘制即用正确语言）
+        i18n.init()
+        self._tr_widgets: list[tuple[object, str, dict]] = []
+        self._status_fn = None            # 状态栏内容的重放函数（None = 即席文本）
+        self._lang_btns: dict[str, ttk.Button] = {}
+
+        root.title(_app_title())
         root.geometry("1180x820")
         root.minsize(940, 620)
         root.configure(bg=BG)
 
         self._build_style()
+        self._build_langbar()
         self._build_login()
         self._build_chat()
         self._build_grid()
         self._build_actions()
         self._build_log()
         self._load_config_into_form()
+
+        i18n.on_change(self.retranslate)
 
         self.root.after(80, self._pump)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -575,33 +610,114 @@ class App:
         st.configure("TCheckbutton", background=BG, foreground=FG)
         st.configure("TCombobox", fieldbackground="#2b2b2b", foreground=FG)
         st.configure("Horizontal.TProgressbar", background="#1f6feb", troughcolor="#2b2b2b")
+        # 分段按钮：语言切换用（与缓存挑选器一致的表达方式）
+        st.configure("Seg.TButton", font=("Microsoft YaHei UI", 9), padding=(10, 3),
+                     background="#2b2b2b", foreground=SUB,
+                     borderwidth=0, relief="flat",
+                     bordercolor="#2b2b2b", lightcolor="#2b2b2b", darkcolor="#2b2b2b")
+        st.map("Seg.TButton",
+               background=[("active", "#3a3a3a")], foreground=[("active", FG)])
+        st.configure("SegOn.TButton", font=("Microsoft YaHei UI", 9, "bold"), padding=(10, 3),
+                     background="#1f6feb", foreground="#ffffff",
+                     borderwidth=0, relief="flat",
+                     bordercolor="#1f6feb", lightcolor="#1f6feb", darkcolor="#1f6feb")
+        st.map("SegOn.TButton", background=[("active", "#2b7bf5")])
+
+    # ---------- i18n ----------
+    def _T(self, widget, key: str, **kw):
+        """给控件设置 i18n 文案并登记，切换语言时统一重刷。
+
+        只用于**构建期一次性设定**的静态文案；文本由运行时函数拥有的控件
+        （b_dl / l_login / l_prompt / l_status）改由 retranslate 重算。
+        """
+        widget.configure(text=t(key, **kw))
+        self._tr_widgets.append((widget, key, kw))
+        return widget
+
+    def _build_langbar(self) -> None:
+        """语言切换条（置顶右侧）。按钮文案固定为 中文/English，不随语言变化。"""
+        f = ttk.Frame(self.root, padding=(12, 6, 12, 0))
+        f.pack(fill="x")
+        box = ttk.Frame(f)
+        box.pack(side="right")
+        self._T(ttk.Label(box, style="Sub.TLabel"), "lang.label").pack(side="left", padx=(0, 6))
+        for code, label in i18n.available().items():
+            b = ttk.Button(box, text=label, style="Seg.TButton", width=8,
+                           command=lambda c=code: self.on_lang_change(c))
+            b.pack(side="left", padx=(0, 4))
+            self._lang_btns[code] = b
+        self._sync_lang_buttons()
+
+    def _sync_lang_buttons(self) -> None:
+        cur = i18n.get_language()
+        for code, btn in self._lang_btns.items():
+            btn.configure(style="SegOn.TButton" if code == cur else "Seg.TButton")
+
+    def on_lang_change(self, code: str) -> None:
+        """切换语言：触发全局刷新并记忆偏好。"""
+        if code == i18n.get_language():
+            return
+        i18n.set_language(code)
+        i18n.save_language(code)
+
+    def retranslate(self) -> None:
+        """语言切换后重刷本窗口的全部文案（静态登记 + 动态重算）。"""
+        for widget, key, kw in self._tr_widgets:
+            try:
+                widget.configure(text=t(key, **kw))
+            except tk.TclError:
+                pass
+        self.update_button()                       # "下载选中（n）"
+        self.l_login.configure(text=self._login_text())
+        self._render_prompt()                      # 待填写的验证码/密码提示
+        for it in self.items:                      # 单元格里"无预览"占位
+            if it.thumb_failed and it.img_label is not None:
+                it.img_label.configure(text=t("cell.no_preview"))
+        self._render_status()
+        self.root.title(_app_title())
+        self._sync_lang_buttons()
+
+    def _login_text(self) -> str:
+        """登录状态标签：未登录 / 已登录：<名字>。"""
+        if not self.logged_in:
+            return t("online.login.not_logged")
+        return t("online.logged_in", who=self.who or t("online.current_account"))
+
+    def _render_prompt(self) -> None:
+        """按当前语言重渲染待填写的提示（若该行正在显示）。"""
+        if self._prompt_spec is None:
+            return
+        key, kw = self._prompt_spec
+        self.l_prompt.configure(text=t(key, **kw))
 
     def _build_login(self) -> None:
         f = ttk.Frame(self.root, padding=(12, 10, 12, 4))
         f.pack(fill="x")
-        ttk.Label(f, text="① 登录（首次需在 my.telegram.org 申请 api_id / api_hash）", style="H.TLabel").grid(
+        self._login_frame = f            # 验证码行要插在它下面
+        self._T(ttk.Label(f, style="H.TLabel"), "online.login.title").grid(
             row=0, column=0, columnspan=8, sticky="w", pady=(0, 6)
         )
-        ttk.Label(f, text="api_id").grid(row=1, column=0, sticky="w")
+        self._T(ttk.Label(f), "online.login.api_id").grid(row=1, column=0, sticky="w")
         self.e_api_id = ttk.Entry(f, width=12)
         self.e_api_id.grid(row=1, column=1, sticky="w", padx=(4, 12))
-        ttk.Label(f, text="api_hash").grid(row=1, column=2, sticky="w")
+        self._T(ttk.Label(f), "online.login.api_hash").grid(row=1, column=2, sticky="w")
         self.e_api_hash = ttk.Entry(f, width=34)
         self.e_api_hash.grid(row=1, column=3, sticky="w", padx=(4, 12))
-        ttk.Label(f, text="手机号").grid(row=1, column=4, sticky="w")
+        self._T(ttk.Label(f), "online.login.phone").grid(row=1, column=4, sticky="w")
         self.e_phone = ttk.Entry(f, width=18)
         self.e_phone.grid(row=1, column=5, sticky="w", padx=(4, 12))
-        self.b_login = ttk.Button(f, text="登录 / 连接", command=self.on_login)
+        self.b_login = self._T(ttk.Button(f, command=self.on_login), "online.login.btn")
         self.b_login.grid(row=1, column=6, sticky="w")
-        self.l_login = ttk.Label(f, text="未登录", style="Sub.TLabel")
+        self.l_login = ttk.Label(f, text=self._login_text(), style="Sub.TLabel")
         self.l_login.grid(row=1, column=7, sticky="w", padx=(10, 0))
 
         # 验证码/密码输入行（默认隐藏，收到后台请求时显示）
         self.pf = ttk.Frame(self.root, padding=(12, 0, 12, 4))
-        ttk.Label(self.pf, text="验证码/密码").grid(row=0, column=0, sticky="w")
+        self._T(ttk.Label(self.pf), "online.login.code_label").grid(row=0, column=0, sticky="w")
         self.e_prompt = ttk.Entry(self.pf, width=28, show="")
         self.e_prompt.grid(row=0, column=1, sticky="w", padx=(4, 8))
-        ttk.Button(self.pf, text="提交", command=self.on_prompt_submit).grid(row=0, column=2)
+        self._T(ttk.Button(self.pf, command=self.on_prompt_submit),
+                "common.submit").grid(row=0, column=2)
         self.l_prompt = ttk.Label(self.pf, text="", style="Sub.TLabel")
         self.l_prompt.grid(row=0, column=3, sticky="w", padx=(10, 0))
         self.e_prompt.bind("<Return>", lambda e: self.on_prompt_submit())
@@ -610,25 +726,28 @@ class App:
     def _build_chat(self) -> None:
         f = ttk.Frame(self.root, padding=(12, 6, 12, 4))
         f.pack(fill="x")
-        ttk.Label(f, text="② 选择聊天与筛选", style="H.TLabel").grid(row=0, column=0, columnspan=10, sticky="w", pady=(0, 6))
-        ttk.Label(f, text="群/频道").grid(row=1, column=0, sticky="w")
+        self._T(ttk.Label(f, style="H.TLabel"), "online.chat.title").grid(
+            row=0, column=0, columnspan=10, sticky="w", pady=(0, 6))
+        self._T(ttk.Label(f), "online.chat.chat_label").grid(row=1, column=0, sticky="w")
         self.e_chat = ttk.Entry(f, width=42)
         self.e_chat.grid(row=1, column=1, columnspan=2, sticky="we", padx=(4, 12))
-        ttk.Label(f, text="（@用户名 / t.me 链接 / 数字ID）", style="Sub.TLabel").grid(row=1, column=3, sticky="w", padx=(0, 16))
-        ttk.Label(f, text="加载数量").grid(row=1, column=4, sticky="w")
+        self._T(ttk.Label(f, style="Sub.TLabel"), "online.chat.chat_hint").grid(
+            row=1, column=3, sticky="w", padx=(0, 16))
+        self._T(ttk.Label(f), "online.chat.count_label").grid(row=1, column=4, sticky="w")
         self.cb_count = ttk.Combobox(f, width=6, values=("30", "60", "100", "200", "500"), state="readonly")
         self.cb_count.set("60")
         self.cb_count.grid(row=1, column=5, sticky="w", padx=(4, 16))
-        ttk.Label(f, text="类型").grid(row=1, column=6, sticky="w")
+        self._T(ttk.Label(f), "online.chat.kind_label").grid(row=1, column=6, sticky="w")
         self.v_photo = tk.BooleanVar(value=True)
         self.v_video = tk.BooleanVar(value=False)
         self.v_file = tk.BooleanVar(value=False)
-        ttk.Checkbutton(f, text="图片", variable=self.v_photo).grid(row=1, column=7, sticky="w")
-        ttk.Checkbutton(f, text="视频", variable=self.v_video).grid(row=1, column=8, sticky="w")
-        ttk.Checkbutton(f, text="文件", variable=self.v_file).grid(row=1, column=9, sticky="w")
-        self.b_load = ttk.Button(f, text="加载媒体", command=self.on_load)
+        self._T(ttk.Checkbutton(f, variable=self.v_photo), "kind.image").grid(row=1, column=7, sticky="w")
+        self._T(ttk.Checkbutton(f, variable=self.v_video), "kind.video").grid(row=1, column=8, sticky="w")
+        self._T(ttk.Checkbutton(f, variable=self.v_file), "kind.file").grid(row=1, column=9, sticky="w")
+        self.b_load = self._T(ttk.Button(f, command=self.on_load), "online.chat.load_btn")
         self.b_load.grid(row=1, column=10, sticky="w", padx=(12, 4))
-        self.b_more = ttk.Button(f, text="加载更早", command=self.on_load_more, state="disabled")
+        self.b_more = self._T(ttk.Button(f, command=self.on_load_more, state="disabled"),
+                              "online.chat.more_btn")
         self.b_more.grid(row=1, column=11, sticky="w")
         f.columnconfigure(1, weight=1)
 
@@ -650,16 +769,22 @@ class App:
     def _build_actions(self) -> None:
         f = ttk.Frame(self.root, padding=(12, 4, 12, 4))
         f.pack(fill="x")
-        ttk.Label(f, text="输出目录").grid(row=0, column=0, sticky="w")
+        self._T(ttk.Label(f), "online.actions.out_label").grid(row=0, column=0, sticky="w")
         self.e_out = ttk.Entry(f, width=58)
         self.e_out.insert(0, str(DEFAULT_OUT))
         self.e_out.grid(row=0, column=1, sticky="we", padx=(4, 6))
-        ttk.Button(f, text="浏览…", command=self.on_pick_dir).grid(row=0, column=2, padx=(0, 12))
-        ttk.Button(f, text="全选", command=lambda: self.set_all(True)).grid(row=0, column=3, padx=(0, 4))
-        ttk.Button(f, text="清除选择", command=lambda: self.set_all(False)).grid(row=0, column=4, padx=(0, 12))
-        self.b_dl = ttk.Button(f, text="下载选中（0）", style="Accent.TButton", command=self.on_download)
+        self._T(ttk.Button(f, command=self.on_pick_dir), "common.browse").grid(
+            row=0, column=2, padx=(0, 12))
+        self._T(ttk.Button(f, command=lambda: self.set_all(True)), "common.select_all").grid(
+            row=0, column=3, padx=(0, 4))
+        self._T(ttk.Button(f, command=lambda: self.set_all(False)), "common.clear_sel").grid(
+            row=0, column=4, padx=(0, 12))
+        # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
+        self.b_dl = ttk.Button(f, text=t("online.download_btn", n=0), style="Accent.TButton",
+                               command=self.on_download)
         self.b_dl.grid(row=0, column=5, padx=(0, 8))
-        self.b_cancel = ttk.Button(f, text="取消", command=self.on_cancel, state="disabled")
+        self.b_cancel = self._T(ttk.Button(f, command=self.on_cancel, state="disabled"),
+                                "common.cancel")
         self.b_cancel.grid(row=0, column=6)
         f.columnconfigure(1, weight=1)
 
@@ -667,7 +792,7 @@ class App:
         f2.pack(fill="x")
         self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100)
         self.pb.pack(side="left", fill="x", expand=True)
-        self.l_status = ttk.Label(f2, text="就绪", style="Sub.TLabel")
+        self.l_status = ttk.Label(f2, text=t("common.ready"), style="Sub.TLabel")
         self.l_status.pack(side="left", padx=(10, 0))
 
     def _build_log(self) -> None:
@@ -694,15 +819,16 @@ class App:
         try:
             api_id = int(self.e_api_id.get().strip())
         except ValueError:
-            messagebox.showwarning(APP_NAME, "api_id 必须是数字")
+            messagebox.showwarning(_app_title(), t("online.dialog.api_id_num"))
             return
         api_hash = self.e_api_hash.get().strip()
         phone = self.e_phone.get().strip()
         if not api_hash or not phone:
-            messagebox.showwarning(APP_NAME, "请填写 api_hash 和手机号（含国家码，如 +8613800000000）")
+            messagebox.showwarning(_app_title(), t("online.dialog.need_hash_phone"))
             return
         self.set_busy(True)
-        self.worker.submit(self.worker.login(api_id, api_hash, phone), label="登录")
+        self.worker.submit(self.worker.login(api_id, api_hash, phone),
+                           label=t("online.task.login"))
 
     def on_prompt_submit(self) -> None:
         if self.prompt_kind is None:
@@ -711,6 +837,7 @@ class App:
         self.e_prompt.delete(0, "end")
         self.pf.pack_forget()
         self.prompt_kind = None
+        self._prompt_spec = None
         self.worker.prompter.provide(value)
 
     def on_load(self) -> None:
@@ -739,7 +866,7 @@ class App:
         if self.v_file.get():
             kinds.add("file")
         if not kinds:
-            messagebox.showwarning(APP_NAME, "请至少勾选一种类型")
+            messagebox.showwarning(_app_title(), t("online.dialog.need_kind"))
             return
         try:
             target = int(self.cb_count.get())
@@ -748,21 +875,22 @@ class App:
         offset = self.next_offset if more else 0
         self.set_busy(True)
         self.worker.submit(
-            self.worker.load_media(chat, target, kinds, offset), label="加载媒体"
+            self.worker.load_media(chat, target, kinds, offset), label=t("online.task.load")
         )
 
     def on_download(self) -> None:
         sel = [it for it in self.items if it.selected]
         if not sel:
-            messagebox.showinfo(APP_NAME, "还没有选中任何文件（在缩略图上单击即可选中）")
+            messagebox.showinfo(_app_title(), t("online.dialog.nothing_selected"))
             return
         out = self.e_out.get().strip() or str(DEFAULT_OUT)
         self.set_busy(True)
-        self.worker.submit(self.worker.download_items(sel, Path(out)), label="下载")
+        self.worker.submit(self.worker.download_items(sel, Path(out)),
+                           label=t("online.task.download"))
 
     def on_cancel(self) -> None:
         self.worker.cancel.set()
-        self.log("已请求取消…")
+        self.log(t("online.log.cancel_req"))
 
     def on_pick_dir(self) -> None:
         chosen = filedialog.askdirectory(initialdir=self.e_out.get() or str(APP_DIR))
@@ -776,7 +904,8 @@ class App:
                         highlightthickness=2, highlightbackground=CARD)
         cell.grid_propagate(False)
         cell.pack_propagate(False)
-        img_label = tk.Label(cell, bg=CARD, fg=SUB, text="…", font=("Microsoft YaHei UI", 9))
+        img_label = tk.Label(cell, bg=CARD, fg=SUB, text=t("cell.loading"),
+                             font=("Microsoft YaHei UI", 9))
         img_label.pack(expand=True)
         info = tk.Label(
             cell,
@@ -814,7 +943,8 @@ class App:
         """双击：下载该原件并打开。"""
         out = self.e_out.get().strip() or str(DEFAULT_OUT)
         self.set_busy(True)
-        self.worker.submit(self.worker.download_single(it, Path(out)), label="预览下载")
+        self.worker.submit(self.worker.download_single(it, Path(out)),
+                           label=t("online.task.preview"))
 
     def set_all(self, value: bool) -> None:
         for it in self.items:
@@ -828,7 +958,7 @@ class App:
 
     def update_button(self) -> None:
         n = sum(1 for it in self.items if it.selected)
-        self.b_dl.configure(text=f"下载选中（{n}）")
+        self.b_dl.configure(text=t("online.download_btn", n=n))
 
     def relayout(self) -> None:
         width = max(self.canvas.winfo_width(), 320)
@@ -864,15 +994,17 @@ class App:
         if kind == "log":
             self.log(msg[1])
         elif kind == "prompt":
-            _, pkind, text = msg
+            _, pkind, key, kw = msg
             self.prompt_kind = pkind
-            self.l_prompt.configure(text=text)
+            self._prompt_spec = (key, kw)          # 供切换语言时重渲染
+            self.l_prompt.configure(text=t(key, **kw))
             self.e_prompt.configure(show="*" if pkind == "password" else "")
-            self.pf.pack(fill="x", after=self.root.winfo_children()[0])
+            self.pf.pack(fill="x", after=self._login_frame)
             self.e_prompt.focus_set()
         elif kind == "logged_in":
             self.logged_in = True
-            self.l_login.configure(text=f"已登录：{msg[1] or '当前账号'}")
+            self.who = msg[1] or ""
+            self.l_login.configure(text=self._login_text())
         elif kind == "busy":
             self.set_busy(bool(msg[1]))
         elif kind == "media_loaded":
@@ -889,41 +1021,43 @@ class App:
             self._thumb_done = 0
             self.b_more.configure(state="disabled" if exhausted else "normal")
             if items:
-                self.status(f"加载 {len(items)} 个媒体，缩略图生成中…")
+                self.status("online.status.loaded", n=len(items))
         elif kind == "thumb":
             _, mid, img = msg
             it = self.by_id.get(mid)
             self._thumb_done += 1
             if it is not None and it.img_label is not None:
                 if img is None:
-                    it.img_label.configure(text="无预览", image="")
+                    it.thumb_failed = True
+                    it.img_label.configure(text=t("cell.no_preview"), image="")
                 else:
                     it.thumb = img
                     it.photo = ImageTk.PhotoImage(img)
                     it.img_label.configure(image=it.photo, text="")
             if self._thumb_total:
-                self.status(f"缩略图 {self._thumb_done}/{self._thumb_total}")
+                self.status("online.status.thumbs",
+                            done=self._thumb_done, total=self._thumb_total)
                 if self._thumb_done >= self._thumb_total:
-                    self.status("就绪：单击选中，双击下载并打开，然后点「下载选中」")
+                    self.status("online.status.ready_hint")
         elif kind == "progress":
             _, done, total = msg
             pct = (done / total * 100) if total else 0
             self.pb.configure(value=pct)
-            self.status(f"下载中 {done}/{total}")
+            self.status("online.status.downloading", done=done, total=total)
         elif kind == "download_done":
             _, out, ok, fail = msg
             self.pb.configure(value=100)
-            self.status(f"完成：成功 {ok}，失败 {fail}")
-            if messagebox.askyesno(APP_NAME, f"下载完成：成功 {ok}，失败 {fail}。\n\n是否打开输出目录？"):
+            self.status("online.status.done", ok=ok, fail=fail)
+            if messagebox.askyesno(_app_title(), t("online.dialog.done_ask", ok=ok, fail=fail)):
                 try:
                     os.startfile(str(out))
                 except Exception as exc:
-                    self.log(f"打开目录失败：{exc}")
+                    self.log(t("online.status.open_dir_failed", exc=exc))
         elif kind == "open_file":
             try:
                 os.startfile(msg[1])
             except Exception as exc:
-                self.log(f"打开文件失败：{exc}")
+                self.log(t("online.status.open_file_failed", exc=exc))
 
     # ---------- 小工具 ----------
     def log(self, text: str) -> None:
@@ -932,8 +1066,17 @@ class App:
         self.txt.see("end")
         self.txt.configure(state="disabled")
 
-    def status(self, text: str) -> None:
-        self.l_status.configure(text=text)
+    def status(self, key: str, **kw) -> None:
+        """设置状态栏文案（记下 key+参数，切换语言时按新语言重放）。"""
+        self._status_fn = (lambda k=key, a=dict(kw): t(k, **a))
+        self.l_status.configure(text=self._status_fn())
+
+    def _render_status(self) -> None:
+        """按当前语言重放状态栏；无重放内容且空闲时回到"就绪"。"""
+        if self._status_fn is not None:
+            self.l_status.configure(text=self._status_fn())
+        elif not self.busy:
+            self.l_status.configure(text=t("common.ready"))
 
     def set_busy(self, busy: bool) -> None:
         self.busy = busy
