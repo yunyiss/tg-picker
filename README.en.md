@@ -175,15 +175,17 @@ never scrolled past in the client).
 | `cache_picker.py` | **Cache picker** GUI (method ①) |
 | `tg_picker.py` | Online picker GUI (method ②, Telethon) |
 | `i18n.py` | Internationalization core: loads language resources, `t(key)` lookups, switches language and notifies the UI to refresh |
+| `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O) and shared constants |
+| `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by both GUIs |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
 | `run_cache.cmd` / `run.cmd` | The two launchers |
-| `requirements.txt` | Dependency list |
+| `requirements.txt` / `requirements-dev.txt` | Runtime / development dependencies (pytest, ruff) |
+| `pyproject.toml` | Project metadata plus ruff and pytest configuration (dependencies live only in the .txt files) |
+| `tests/` | pytest test suite (see section 8) |
 | `LICENSE` | MIT license + third-party attribution + disclaimer |
 | `CHANGELOG.md` | Change log (Chinese) |
 | `README.en.md` | This English document |
-| `_selftest_*.py` | Functional self-tests (can run against real data; `_selftest_i18n.py` needs no tdata) |
-| `_smoketest_*.py` | GUI smoke tests |
 
 **Generated at runtime, not tracked in version control**:
 
@@ -312,3 +314,72 @@ canvas text) to confirm no Chinese characters remain.
   no manual config editing is required.
 - `run.cmd` / `run_cache.cmd` print their missing-virtualenv notice in both Chinese and
   English.
+
+---
+
+## 8. Development and testing
+
+### Layout
+
+```
+tg-picker/
+├─ run.cmd / run_cache.cmd        launchers (call the entry points below by relative path)
+├─ cache_picker.py / tg_picker.py the two entry points (GUI)
+├─ cache_source.py                cache decryption and indexing (must stay next to _vendor/)
+├─ i18n.py                        translation core
+├─ ui_kit.py / ui_lang.py         shared helpers and the language-switching UI mechanism
+├─ locales/                       language resources (zh.json / en.json)
+├─ _vendor/tg_scoop/              decryption core (verbatim upstream copy)
+├─ tests/                         pytest suite
+└─ pyproject.toml / requirements*.txt
+```
+
+> The project deliberately keeps a **flat layout** (entry scripts + modules) with no
+> `src/` package: `cache_source.py` locates the decryption core via a sibling
+> `_vendor/`, `i18n.py` locates resources via `HERE/locales`, and both `.cmd` launchers
+> invoke the entry points via `%~dp0`. Moving modules into a package would break all
+> three at once.
+
+### Installing dependencies
+
+```cmd
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt        :: tool only
+.venv\Scripts\pip install -r requirements-dev.txt    :: plus tests and lint (includes the above)
+```
+
+### Running the tests
+
+```cmd
+.venv\Scripts\python.exe -m pytest                   :: everything
+.venv\Scripts\python.exe -m pytest -m "not gui"      :: skip the display-dependent GUI tests
+.venv\Scripts\python.exe -m pytest -m gui            :: GUI tests only
+.venv\Scripts\python.exe -m ruff check .             :: static checks
+```
+
+| Test file | Coverage | Requirements |
+|---|---|---|
+| `tests/test_i18n.py` | identical key sets, identical placeholders, every source key has resources, switching behaviour; walks both UIs in English mode to prove no Chinese remains | no tdata; the last two need a display |
+| `tests/test_cache_source.py` | decryptor discovery, LocalKey derivation, enumerate/decrypt/sniff/thumbnail, index round-trip and invalidation, tdata read-only | real tdata |
+| `tests/test_cache_picker_logic.py` | loading the cache, saving (including no-overwrite on name clash), date subfolders, preview, index reuse rate | real tdata |
+| `tests/test_gui_online.py` | online picker GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
+| `tests/test_gui_cache.py` | cache picker GUI: virtualized rendering, scroll performance, selection actions, language switch | real tdata + display |
+
+- When no tdata is found those tests are **skipped** (not failed); point at one with the
+  `TDATA_PATH` environment variable, e.g. `set TDATA_PATH=D:\Telegram\tdata`.
+- GUI tests are likewise skipped when there is no display (for example Linux without X).
+- The tests **never** rewrite your language preference (they only call
+  `i18n.set_language`, never the preference-writing `on_lang_change`) and never write
+  into tdata.
+
+### Code style
+
+- `ruff` runs only deterministic checks (`E/F/I/UP/B`) and performs **no** reformatting;
+  `_vendor/` is excluded.
+- Line endings are enforced by `.gitattributes`: source and config are LF, `.cmd`/`.bat`
+  are CRLF. If you cloned the repository before these rules existed, normalise once:
+
+  ```cmd
+  git add --renormalize .
+  git commit -m "chore: normalize line endings to LF"
+  ```

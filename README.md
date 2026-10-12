@@ -148,15 +148,17 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `cache_picker.py` | **缓存挑选器** GUI（方法①） |
 | `tg_picker.py` | 在线挑选器 GUI（方法②，Telethon） |
 | `i18n.py` | 国际化内核：载入语言资源、`t(key)` 取词、切换语言并通知界面刷新 |
+| `ui_kit.py` | 与界面无关的通用工具（`human_size` / `unique_path` / 配置读写）与共享常量 |
+| `ui_lang.py` | 语言切换的界面机制（`LangMixin`），两个 GUI 共用 |
 | `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run_cache.cmd` / `run.cmd` | 两个启动脚本 |
-| `requirements.txt` | 依赖清单 |
+| `requirements.txt` / `requirements-dev.txt` | 运行依赖 / 开发测试依赖（pytest、ruff） |
+| `pyproject.toml` | 项目元数据与 ruff、pytest 配置（依赖只在上面的 txt 里声明） |
+| `tests/` | pytest 测试套件（详见「八、开发与测试」） |
 | `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
 | `CHANGELOG.md` | 变更记录（中文） |
 | `README.en.md` | 本说明的英文版 |
-| `_selftest_*.py` | 功能自检（可在真实数据上跑；`_selftest_i18n.py` 无需 tdata） |
-| `_smoketest_*.py` | GUI 冒烟测试 |
 
 **运行时自动生成、不入版本库**：
 
@@ -271,3 +273,68 @@ self.b_save.configure(text=t("cache.bottom.save_n", n=3))   # → 保存选中�
 - 旧版 `cache_config.json` 里以中文文本保存的排序项（如 `"日期 新→旧"`）会在读取时
   自动迁移成内部键（`date_desc`），无需手工改配置。
 - `run.cmd` / `run_cache.cmd` 在虚拟环境缺失时的提示为中英同行显示。
+
+---
+
+## 八、开发与测试
+
+### 目录结构
+
+```
+tg-picker/
+├─ run.cmd / run_cache.cmd        启动脚本（相对路径调用下面的入口）
+├─ cache_picker.py / tg_picker.py 两个入口（GUI）
+├─ cache_source.py                缓存解密与索引（必须与 _vendor/ 同级）
+├─ i18n.py                        翻译内核
+├─ ui_kit.py / ui_lang.py         共享工具与语言切换界面机制
+├─ locales/                       语言资源（zh.json / en.json）
+├─ _vendor/tg_scoop/              解密内核（上游原样副本）
+├─ tests/                         pytest 测试
+└─ pyproject.toml / requirements*.txt
+```
+
+> 说明：本项目**刻意保持扁平布局**（入口脚本 + 模块），没有 `src/` 包。
+> 原因是 `cache_source.py` 靠同级 `_vendor/` 定位解密内核、`i18n.py` 靠
+> `HERE/locales` 定位资源、两个 `.cmd` 靠 `%~dp0` 调用入口——搬进包会同时破坏这几处。
+
+### 安装依赖
+
+```cmd
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt        :: 只跑工具
+.venv\Scripts\pip install -r requirements-dev.txt    :: 加上测试与 lint（含上面这份）
+```
+
+### 运行测试
+
+```cmd
+.venv\Scripts\python.exe -m pytest                   :: 全部用例
+.venv\Scripts\python.exe -m pytest -m "not gui"      :: 跳过需要显示器的 GUI 用例
+.venv\Scripts\python.exe -m pytest -m gui            :: 只跑 GUI 用例
+.venv\Scripts\python.exe -m ruff check .             :: 静态检查
+```
+
+| 测试文件 | 覆盖面 | 依赖 |
+|---|---|---|
+| `tests/test_i18n.py` | 两份资源键一致、占位符一致、源码键全覆盖、切换行为；英文模式遍历界面确认无中文残留 | 无 tdata；最后两项需显示器 |
+| `tests/test_cache_source.py` | 定位解密内核、派生 LocalKey、枚举/解密/嗅探/缩略图、索引读写与失效、tdata 只读 | 需真实 tdata |
+| `tests/test_cache_picker_logic.py` | 读取缓存、保存（含重名不覆盖）、按日期分目录、预览、索引复用率 | 需真实 tdata |
+| `tests/test_gui_online.py` | 在线挑选器 GUI：建窗、队列分支、单元格选中、语言切换、验证码回填 | 需显示器（不联网） |
+| `tests/test_gui_cache.py` | 缓存挑选器 GUI：虚拟化渲染、滚动性能、选择操作、语言切换 | 需真实 tdata + 显示器 |
+
+- 找不到 tdata 时相关用例会**跳过**（`skip`，不算失败）；可用环境变量
+  `TDATA_PATH` 指定：`set TDATA_PATH=D:\Telegram\tdata`。
+- 没有显示器（如 Linux 无 X）时 GUI 用例同样会跳过。
+- 测试**不会**改写你的语言偏好（只调 `i18n.set_language`，不调会写
+  `language.json` 的 `on_lang_change`），也不会写入 tdata。
+
+### 代码风格
+
+- `ruff` 只启用确定性检查（`E/F/I/UP/B`），**不做**格式化重排；`_vendor/` 不参与检查。
+- 换行符由 `.gitattributes` 约束：源码与配置 LF、`.cmd`/`.bat` 为 CRLF。
+  若在引入这些约定之前克隆过仓库，执行一次归一即可：
+
+  ```cmd
+  git add --renormalize .
+  git commit -m "chore: 统一换行符为 LF"
+  ```

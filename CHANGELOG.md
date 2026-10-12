@@ -1,5 +1,59 @@
 # 变更记录
 
+## 2026-10-12（工程化重构：修缺陷、去重复、规范化）
+
+### 背景
+功能已完整、测试通过，但作为「可直接交付」的项目仍有欠缺。经逐行审查（两个 GUI + 领域层）、
+项目级规范审查与 AST 静态检查，发现三类问题：**真实缺陷**（不是风格问题）、**重复实现与
+命名不一致**、**项目级规范缺失**（无 pyproject/ruff/pytest 配置、无 .gitattributes，
+换行符混乱；测试散在根目录且 `_smoketest_cachepicker.py` 退出码恒为 0，失败会被当成通过）。
+
+### 修改（缺陷修复，不改变产品行为）
+- **读取中点「重新扫描」会白删索引**：`on_reload` 先删索引再调 `on_load`，而后者在 busy 时
+  提前返回 → 索引丢失却不重扫。改为先判 busy。
+- **保存失败会连弹两个对话框**：失败路径同时投递 `load_error` 与 `save_done`，后者还用成功
+  文案。现在只报错一次。
+- **在线挑选器可能永久死锁**：`Prompter.ask` 在 asyncio 事件循环线程里做无超时阻塞等待，
+  用户不填验证码就永不苏醒、busy 永不复位。改为带 `PROMPT_TIMEOUT` 超时，
+  且登录全程响应「取消」（此前取消按钮对登录完全无效）。
+- **两个 GUI 的轮询会永久停摆**：`_pump` 把 `after()` 排在循环之后且无保护，任一回调抛异常
+  即断掉 after 链、界面假死。改为单条消息隔离异常 + 兜底重排。
+- 其余：`prepare()` 被取消时不再写半成品索引；`_on_close` 取消所有 after 任务并注销语言监听；
+  预览文件重名不再覆盖；卡片右下边缘像素不再被判成间隙（点击失效）；预览加重入保护；
+  邀请链接解析失败不再把完整 URL 丢给 `get_entity`（必然失败）。
+
+### 修改（结构）
+- 新增 `ui_kit.py`（叶子模块）：`human_size` / `unique_path` 原先在 `cache_source.py` 与
+  `tg_picker.py` 各有一份且行为不一致，现统一；`load_config` / `save_config` 也由两个 GUI
+  各写一份改为共用（读取失败不再静默吞掉，改为告警一次）；共享字体常量。
+  **刻意不合并**两套配色与缩略图边长（会改变视觉输出）。
+- 新增 `ui_lang.py`（`LangMixin`）：两个 GUI 曾各自重写一遍的 i18n 界面机制（`_T` 登记、
+  `retranslate`、语言按钮、可重放状态栏）收敛为一份，差异留给子类钩子。
+- `cache_picker.Item` 更名为 `MediaItem`（与在线挑选器同一概念对齐）。
+- 拆分超长函数（逐行搬运、不改逻辑）：`_build_style` 140 行拆为 7 个按控件类别的样式函数；
+  两个 `_handle` 拆为按消息类型分发的 `_msg_*`。补齐缺失 docstring 与类型标注，
+  修正「注释称上边距 7、实现是 8」这类不一致。
+- 测试迁入 `tests/` 并改写为 pytest（见下）。
+
+### 修改（工程规范）
+- 新增 `pyproject.toml`（项目元数据 + ruff/pytest 配置；依赖只在 requirements 里声明，
+  避免两处漂移）、`requirements-dev.txt`、`.editorconfig`、`.gitattributes`
+  （源码 LF、`.cmd` CRLF）。
+- `requirements.txt` 补版本上界。
+- 根目录 5 个 `_selftest_*.py` / `_smoketest_*.py` 脚本迁移为 `tests/` 下的 pytest 用例；
+  统一由 `tests/conftest.py` 处理导入路径、tdata 与显示器缺失时的 skip。
+  **修掉假阳性**：缓存 GUI 测试原先只写日志、退出码恒为 0，现改为真实断言。
+  同时移除一个会偶发失败的耗时断言（只断言索引复用率）。
+
+### 验证
+- `python -m pytest`：**23 passed**（真实 tdata：读取 3000+ 媒体、保存/重名不覆盖/按日期
+  分目录/预览/索引复用率、tdata 只读；两个 GUI 端到端含滚动性能与语言切换；
+  i18n 键一致性与英文模式无中文残留）。
+- `python -m ruff check .`：全部通过。
+- **ruff 抓到一处重构引入的真实缺陷**：`cache_picker.py` 被误删 `import sys`，而
+  `_default_tdata()` 仍在使用它——平时都有已保存的 tdata 路径，走不到该分支，测试不会暴露。
+  已修复，并把它改为静态方法 + 补一条无需 GUI 的回归测试。
+
 ## 2026-10-12（中英双语国际化）
 
 ### 背景
