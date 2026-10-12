@@ -1,11 +1,11 @@
-# 图形界面（cache_picker / gallery_picker / tg_picker 均需要）
+# 图形界面（cache_picker / tg_picker 均需要）
 Pillow>=10.0
 
-# 直读 tdata 缓存所需：TDEF 缓存的 AES 解密
+# 直读 tdata 缓存所需（方法①）：TDEF 缓存的 AES 解密
 pycryptodome>=3.19
 
-# 视频缩略图：自带静态 ffmpeg，用于从视频抽首帧
+# 视频缩略图：自带静态 ffmpeg，用于从视频抽首帧（无需系统装 ffmpeg）
 imageio-ffmpeg>=0.4
 
-# 仅 tg_picker.py（按群/频道在线挑选下载）需要
+# 仅 tg_picker.py（方法②：按群/频道在线挑选下载）需要
 telethon>=1.34

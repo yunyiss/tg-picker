@@ -45,6 +45,35 @@ VIDEO_SEEK = "0.1"              # 抽帧位置：略微避开可能全黑的开�
 
 _FFMPEG_CACHE: str | None = None
 
+
+# ---------------------------------------------------------------------------
+# 通用小工具
+# ---------------------------------------------------------------------------
+def human_size(n: int | None) -> str:
+    """把字节数格式化成可读文本（如 1.5 MB）；falsy 值返回 '-'。"""
+    if not n:
+        return "-"
+    size = float(n)
+    for unit in ("B", "KB", "MB", "GB"):
+        if size < 1024 or unit == "GB":
+            return f"{size:.0f} {unit}" if unit == "B" else f"{size:.1f} {unit}"
+        size /= 1024
+    return f"{size:.1f} GB"
+
+
+def unique_path(path: Path) -> Path:
+    """目标已存在时追加 (1)(2)… 后缀，绝不覆盖已有文件。"""
+    path = Path(path)
+    if not path.exists():
+        return path
+    stem, suffix = path.stem, path.suffix
+    for i in range(1, 100000):
+        cand = path.with_name(f"{stem} ({i}){suffix}")
+        if not cand.exists():
+            return cand
+    raise RuntimeError(f"命名冲突过多，无法为 {path.name} 找到可用名字")
+
+
 # Windows：GUI 通过 pythonw.exe（无控制台）启动时，每次调用 ffmpeg.exe
 # 这类控制台程序，系统都会为它**新建一个控制台窗口**并闪一下。缩略图是
 # 边滚动边生成的，于是表现为"加载时不断弹窗"。必须显式要求不创建窗口。

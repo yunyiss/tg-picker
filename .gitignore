@@ -19,11 +19,9 @@ env/
 
 # ---- 运行时产物（缩略图缓存、索引、预览/抽帧临时文件）----
 cache_thumbs/
-thumbs/
 preview/
 tmp_video/
 cache_index.json
-*.tg-scoop-state.json
 
 # ---- 自检/测试的输出日志 ----
 _smoketest_*.txt
@@ -32,7 +30,6 @@ _smoketest_*.log
 
 # ---- 本地配置（可能含路径，甚至 api 凭据）----
 cache_config.json
-gallery_config.json
 
 # ---- 登录会话与密钥：绝对不进版本库 ----
 *.session

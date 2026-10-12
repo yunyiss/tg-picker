@@ -33,7 +33,7 @@ from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 
 import cache_source as cs
-from gallery_picker import human_size, unique_path
+from cache_source import human_size, unique_path
 
 APP_NAME = "Telegram 缓存挑选器"
 HERE = Path(__file__).resolve().parent

@@ -1,5 +1,28 @@
 # 变更记录
 
+## 2026-10-12（聚焦定位：移除文件夹挑选器）
+
+### 背景
+产品定位明确为「**绕过 Telegram 的禁止保存限制**」。原先还有一个
+"文件夹挑选器"（浏览本地已导出图片文件夹），它与该定位无关，且属于
+"先整批导出、再挑一遍"的多余步骤——缓存挑选器已能直接读缓存边看边挑，
+不需要中间那一步导出。
+
+### 修改
+- 移除 `gallery_picker.py`（955 行）、`run_gallery.cmd`、
+  `_selftest_gallery.py`、`_smoketest_gallery.py`
+- `cache_picker.py` 原先从 `gallery_picker` 借用 `human_size` / `unique_path`
+  两个通用函数，已把这两个函数移入 `cache_source.py`，解除耦合
+- 清理 gallery 专用产物：`thumbs/` 缓存目录、`gallery_config.json`
+- 清理 `.gitignore` 中 gallery 相关条目
+- README 重写开篇：说明「禁止保存」的原理（服务器拒绝**转发**、
+  但保存只是**请求客户端自律**），并把两种方法（缓存 / 在线）并列；
+  新增「致谢」章节专门感谢上游 tg-scoop 把解密算法写清楚
+
+### 验证
+移除后回归：`_selftest_cache.py`、`_selftest_cachepicker.py`、
+`_smoketest_gui.py`、`_smoketest_cachepicker.py` 从 `C:\` 运行全部通过。
+
 ## 2026-10-12（自包含：内置解密内核）
 
 ### 背景
@@ -138,10 +161,13 @@
 
 ## 更早（同一会话内）
 
-### 三种挑选器
+### 两种挑选器
 - `tg_picker.py`：Telethon 版，按群/频道在线浏览缩略图并挑选下载
   （需要 `api_id` / `api_hash`）。
-- `gallery_picker.py`：浏览本地已导出的文件夹。
+
+> 曾短暂存在 `gallery_picker.py`（浏览本地已导出文件夹的挑选器），
+> 因与产品定位（绕过 Telegram 保存限制）无关、且"先导出再挑"属于多余步骤，
+> 已于 2026-10-12 移除。
 
 ### 缓存解密可行性验证
 - 复用 tg-scoop 的解密实现，从本机一份真实 `tdata` 成功解出 3019 个媒体

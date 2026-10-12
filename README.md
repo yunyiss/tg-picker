@@ -1,18 +1,25 @@
-# tg-picker —— 图片挑选器合集
+# tg-picker —— 绕过 Telegram「禁止保存」的图片挑选器
 
-三个独立的图形界面工具，共同点是：**缩略图墙浏览 → 点选想要的 → 只保存选中的**，
-不用把整个群聊或整个缓存全量导出。
+Telegram 的群组/频道可以开启 **「禁止保存」**（Restrict Saving Content），
+开启后官方客户端会隐藏保存与转发按钮，图片视频只能看、存不下来。
 
-| 工具 | 数据来源 | 是否需要联网/凭据 | 启动 |
-|---|---|---|---|
-| **缓存挑选器** | 直读 Telegram `tdata` 缓存 | 不需要（纯本地） | `run_cache.cmd` |
-| **文件夹挑选器** | 本地已导出的图片文件夹 | 不需要 | `run_gallery.cmd` |
-| **在线挑选器** | Telegram API 按群/频道浏览 | 需要 api_id / api_hash | `run.cmd` |
+本工具提供**两种**把内容存下来的方法，共同点是：
+**缩略图墙浏览 → 点选想要的 → 只保存选中的**，不必整群全量导出。
 
-> **本项目自包含**：解密所需的内核已随项目分发在 `_vendor/tg_scoop/`
-> （来自 [GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)，MIT），
-> 因此**不依赖任何外部目录**，整个文件夹拷到哪都能跑。
-> 出处说明见 [`_vendor/README.md`](_vendor/README.md)。
+| 方法 | 原理 | 数据来源 | 需要凭据 | 启动 |
+|---|---|---|---|---|
+| **① 缓存挑选器** | 解密本机已缓存的媒体 | Telegram `tdata` 缓存 | **不需要** | `run_cache.cmd` |
+| **② 在线挑选器** | 用账号 API 直接下载 | Telegram 服务器 | 需要 api_id / api_hash | `run.cmd` |
+
+> ### 为什么这两种能work？
+> Telegram 官方协议对"禁止保存"的处理是**分离**的：服务器**硬拒绝转发**
+> （错误码 `CHAT_FORWARDS_RESTRICTED`），但对"保存"只是**请求客户端自律**
+> （协议原文用词是 *should*）。也就是说：**媒体字节本来就完整送到了你设备上**，
+> 官方客户端只是"自愿"把保存按钮藏了。
+>
+> 两种方法都不做转发，因此不触发服务器拒绝：
+> - **①** 解密已落盘的加密缓存（没破解服务器，只是把本机文件还原）
+> - **②** 用你自己的账号读消息并下载（等同你自己在客户端里能做的操作）
 
 ---
 
@@ -25,39 +32,33 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-然后按需要双击对应脚本（或按上表选择）：
+然后按需要双击：
 
 | 我想…… | 双击 | 说明 |
 |---|---|---|
-| 浏览并挑选 **Telegram 缓存里**的图 | `run_cache.cmd` | 首次会自动探测 `tdata` 位置，也可手动选 |
-| 挑选一个**本地文件夹**里的图 | `run_gallery.cmd` | |
-| 按**群/频道在线**浏览并下载 | `run.cmd` | 需先申请 api_id / api_hash（见第四节） |
+| 挑选我**已经在 Telegram 里看过**的图 | `run_cache.cmd` | 首次自动探测 `tdata`，也可手动选；**无需登录任何东西** |
+| 挑**没缓存过**的内容（历史消息等） | `run.cmd` | 需先申请 api_id / api_hash（见第三节） |
 
-> **要求**：Python 3.11+（仅缓存版实测于 3.13）；
-> 桌面环境需有 Tk（Windows 官方安装包自带）。
+> **要求**：Python 3.11+（实测于 3.13）；桌面环境需有 Tk（Windows 官方安装包自带）。
 
 ---
 
 ## 一、环境与依赖
-
-依赖很轻，只有 4 个直接依赖（另有 3 个是 telethon 的传递依赖）：
 
 | 依赖 | 用途 | 装后体积 |
 |---|---|---|
 | `Pillow` | 解码/缩放图片、GUI 显示 | ~15 MB |
 | `pycryptodome` | AES 解密 tdata 缓存 | ~7 MB |
 | `imageio-ffmpeg` | 抽视频首帧（自带静态 ffmpeg，**无需系统装 ffmpeg**） | ~84 MB |
-| `telethon` | 仅在线挑选器需要 | ~13 MB |
-
-重装依赖：
+| `telethon` | 仅在线挑选器（方法②）需要 | ~13 MB |
 
 ```cmd
 python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-> 只要缓存挑选器、不要在线挑图的话，可以只装前三个
-> （把 `telethon` 那行从 `requirements.txt` 删掉即可）。
+> 只用缓存挑选器（方法①）的话，可以不要 `telethon`——把 `requirements.txt`
+> 里那一行删掉即可，省约 13 MB。
 
 ## 一·补、解密内核的来源与边界
 
@@ -108,23 +109,10 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ---
 
-## 三、文件夹挑选器（`run_gallery.cmd`）
+## 三、在线挑选器（方法②，`run.cmd`，需要凭据）
 
-用于浏览**已经导出到本地**的图片/视频文件夹。
-
-1. 双击 `run_gallery.cmd`
-2. 选「图片文件夹」→ 点「重新扫描」
-3. 挑选后选择保存方式：
-   - **复制**（默认，源文件保留）
-   - **移动**（源文件被移走，适合挑完清理）
-   - **按日期分文件夹**
-
----
-
-## 四、在线挑选器（`run.cmd`，需要凭据）
-
-通过 Telegram API 按**群/频道**在线浏览缩略图并挑选下载，适合"缓存里没有、
-但服务器上有"的内容。
+通过 Telegram API 按**群/频道**在线浏览缩略图并挑选下载。
+适合**缓存里没有**的内容（例如很久以前的消息、你没在客户端里翻到过的媒体）。
 
 ### 申请 api_id / api_hash（一次，免费）
 
@@ -150,17 +138,17 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ---
 
-## 五、文件说明
+## 四、文件说明
 
 | 文件 | 作用 |
 |---|---|
-| `cache_source.py` | 缓存解密与读取（TDEF、索引、缩略图缓存） |
-| `cache_picker.py` | 缓存挑选器 GUI |
-| `gallery_picker.py` | 文件夹挑选器 GUI |
-| `tg_picker.py` | 在线挑选器 GUI（Telethon） |
+| `cache_source.py` | 缓存解密与读取（TDEF、索引、缩略图缓存、抽帧） |
+| `cache_picker.py` | **缓存挑选器** GUI（方法①） |
+| `tg_picker.py` | 在线挑选器 GUI（方法②，Telethon） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
-| `run_cache.cmd` / `run_gallery.cmd` / `run.cmd` | 三个启动脚本 |
+| `run_cache.cmd` / `run.cmd` | 两个启动脚本 |
 | `requirements.txt` | 依赖清单 |
+| `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
 | `CHANGELOG.md` | 变更记录 |
 | `_selftest_*.py` | 功能自检（可在真实数据上跑） |
 | `_smoketest_*.py` | GUI 冒烟测试 |
@@ -169,17 +157,30 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 | 路径 | 说明 |
 |---|---|
-| `cache_thumbs/`、`thumbs/` | 缩略图缓存（可删，会自动重建） |
+| `cache_thumbs/` | 缩略图缓存（可删，会自动重建） |
 | `cache_index.json` | 缓存索引（删掉后会重新解密一遍） |
 | `preview/` | 双击预览的临时文件（可删） |
-| `cache_config.json`、`gallery_config.json` | 记住上次的路径与偏好 |
+| `tmp_video/` | 视频抽帧临时目录（自动清理） |
+| `cache_config.json` | 记住上次的路径与偏好 |
 | `tg_picker.session`、`config.json` | 在线挑选器的会话与凭据（**勿外传**） |
+
+---
+
+## 五、致谢
+
+- 解密内核来自 **[GarrettFynn/tg-scoop](https://github.com/GarrettFynn/tg-scoop)**
+  （MIT）——它把 Telegram Desktop 的 `tdata` 密钥派生与 `TDEF` 缓存解密
+  整理成了可复用的实现。本项目直接复用了这四个文件
+  （见 `_vendor/README.md`）；本项目自己实现的是缓存遍历与索引、
+  类型嗅探、缩略图与抽帧、以及全部 GUI 与交互逻辑。
+- 上游把该算法写清楚，是本工具能存在的前提。
 
 ---
 
 ## 六、合规提醒
 
-本工具集只做**你自己有权访问的内容**的本地读取与保存：不破解服务器、
+本工具只做**你自己有权访问的内容**的本地读取与保存：不破解服务器、
 不绕过 Telegram 的服务端限制、不托管内容、不做转发。
-缓存挑选器只提取**已经缓存到你自己硬盘上**的数据。
+缓存挑选器只提取**已经缓存到你自己硬盘上**的数据；
+在线挑选器只用你自己的账号读取你本就能看到的内容。
 请遵守所在地区法律与内容所有者设定的规则。
