@@ -27,11 +27,19 @@ target-version = "py311"
 extend-exclude = ["_vendor"]
 
 [tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+select = ["E", "F", "I", "UP", "B", "C90", "N"]
+
+# 圈复杂度上限：15 以上会被拦下（个别天然分支多的函数在下方的 per-file 里豁免）。
+[tool.ruff.lint.mccabe]
+max-complexity = 15
 
 [tool.ruff.lint.per-file-ignores]
 # conftest 需要先修改 sys.path 再导入被测模块
-"tests/*" = ["E402"]
+"tests/*" = ["E402", "C901", "N806"]
+# tg_picker 是异步 + GUI 编排：登录/分页扫描的分支天然较多，不设复杂度上限
+"tg_picker.py" = ["C901"]
+# LangMixin 的 _T 是"登记并翻译文案"的注册器，刻意用大写 T 与 t() 呼应
+"ui_lang.py" = ["N802"]
 
 # ---------------------------------------------------------------------------
 # 测试：默认跑 tests/ 下全部用例；GUI 用例标记 gui，无显示器时自动 skip，

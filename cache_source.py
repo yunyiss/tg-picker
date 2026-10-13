@@ -179,7 +179,7 @@ class CacheError(RuntimeError):
     """缓存读取过程中的可预期错误。"""
 
 
-class PasscodeRequired(CacheError):
+class PasscodeRequiredError(CacheError):
     """该 tdata 设有本地锁定密码。"""
 
 
@@ -313,21 +313,21 @@ class CacheReader:
         if not tdata.is_dir():
             raise CacheError(t("cs.err_tdata_missing", tdata=tdata))
         (
-            TdataReader,
-            CacheDecryptor,
+            tdata_reader_cls,
+            cache_decryptor_cls,
             iter_cache_files,
-            PasswordRequiredError,
+            password_required_error,
             tdef_offset,
         ) = _import_decryptor()
         self.tdata = tdata
         self._iter_cache_files = iter_cache_files
         self._tdef_offset = tdef_offset
-        self._reader = TdataReader(tdata)
+        self._reader = tdata_reader_cls(tdata)
         try:
             local_key = self._reader.read_local_key(passcode)
-        except PasswordRequiredError as exc:
-            raise PasscodeRequired(t("cs.err_passcode")) from exc
-        self._decryptor = CacheDecryptor(local_key)
+        except password_required_error as exc:
+            raise PasscodeRequiredError(t("cs.err_passcode")) from exc
+        self._decryptor = cache_decryptor_cls(local_key)
 
     def cache_roots(self) -> list[Path]:
         """返回存在的缓存根目录。"""

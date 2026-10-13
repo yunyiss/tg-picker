@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-10-13（工程化：ruff 扩展复杂度与命名规则）
+
+### 修改
+- `select` 增加 `C90`（圈复杂度，上限 15）与 `N`（pep8-naming）。
+- 随之修正 `cache_source`：`PasscodeRequired` → `PasscodeRequiredError`（N818）；
+  `_import_decryptor()` 解包出的类别名改为小写（N806）。调用方
+  `cache_picker` 的 `except cs.PasscodeRequired` 同步更名。
+- 对三处**刻意或天然**的情况做窄范围豁免，并在配置里注明理由：`tests/*` 的
+  C901/N806、`tg_picker.py` 的 C901（异步 + 分页编排分支天然多）、
+  `ui_lang.py` 的 N802（`_T` 注册器刻意大写，与 `t()` 呼应）。
+
+### 验证
+- `ruff check .` 在新规则下**全绿**；`pytest` **49 passed**。
+
 ## 2026-10-13（工程化：日志改用 logging 并做轮转）
 
 ### 背景

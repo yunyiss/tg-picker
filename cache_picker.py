@@ -998,7 +998,7 @@ class CacheApp(LangMixin):
                     workers=workers,
                 )
                 self.ui_q.put(("load_done", tdata, entries, stats, passcode, time.time() - t0))
-            except cs.PasscodeRequired as exc:
+            except cs.PasscodeRequiredError as exc:
                 # 只传语言键，由主线程渲染，避免工作线程在切换语言瞬间取到半新状态
                 self.ui_q.put(("load_error", "cache.dialog.need_passcode_title", str(exc)))
             except cs.CacheError as exc:
