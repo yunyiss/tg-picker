@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-10-13（工程化：新增 GitHub Actions CI）
+
+### 修改
+- 新增 `.github/workflows/ci.yml`：push / PR 时在 `ubuntu-latest` 与
+  `windows-latest` 上运行 `ruff check .` 与 `pytest -m "not gui"`；Linux 侧额外
+  安装 `python3-tk`（`tests/conftest.py` 顶层 `import tkinter` 需要它）。
+  需要真实 tdata 的用例因找不到 tdata 自动 skip，GUI 用例按标记排除——
+  CI 保证的是"纯逻辑 + 单测"这条线不退化。
+
+### 验证
+- 本地以同一选择执行 `pytest -m "not gui"`：**32 passed / 15 deselected**；
+  `ruff check .` 全绿。
+
 ## 2026-10-13（优化：复用 CacheReader，避免重复派生 LocalKey）
 
 ### 背景
