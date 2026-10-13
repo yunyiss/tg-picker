@@ -41,7 +41,8 @@ HEAD_BYTES = 64 * 1024          # 索引阶段嗅探时解密的前缀长度
 MAX_DECRYPT_BYTES = 512 * 1024 * 1024
 
 # 视频首帧提取：把解密后的明文写成临时文件，交给 ffmpeg 抽一帧。
-# ffmpeg 由 imageio-ffmpeg 提供（自带静态二进制，无需系统安装）。
+# ffmpeg 的查找顺序见 ffmpeg_exe()：imageio-ffmpeg（开发）→ 自带的 ffmpeg
+# （随工具分发的裁剪版）→ 系统 PATH（兜底）。自包含发布时自带二进制，用户无需安装。
 VIDEO_THUMB_TIMEOUT = 30        # 单个视频抽帧超时（秒）
 VIDEO_SEEK = "0.1"              # 抽帧位置：略微避开可能全黑的开头
 
@@ -82,8 +83,38 @@ def _hidden_subprocess_kwargs() -> dict:
     return kwargs
 
 
+def _bundled_ffmpeg() -> str:
+    """查找**随工具分发**的 ffmpeg（自包含发布时放在程序目录/冻结资源目录里）。
+
+    发布形态是"独立可执行包"：ffmpeg 与程序一起分发，用户无需另装。
+    在源码运行时这里通常找不到（返回空串），交由后续的 PATH 兜底。
+    """
+    names = ("ffmpeg.exe",) if sys.platform == "win32" else ("ffmpeg",)
+    dirs: list[Path] = []
+    meipass = getattr(sys, "_MEIPASS", None)   # PyInstaller 冻结资源目录
+    if meipass:
+        dirs.append(Path(meipass))
+    exe = getattr(sys, "executable", "") or ""
+    if exe:
+        dirs.append(Path(exe).resolve().parent)
+    dirs.append(Path(__file__).resolve().parent)
+    for d in dirs:
+        for n in names:
+            p = d / n
+            try:
+                if p.is_file():
+                    return str(p)
+            except OSError:
+                continue
+    return ""
+
+
 def ffmpeg_exe() -> str | None:
-    """返回可用的 ffmpeg 路径：优先 imageio-ffmpeg 自带的，其次系统 PATH。
+    """返回可用的 ffmpeg 路径，查找顺序：
+
+    1. imageio-ffmpeg 自带的（开发环境）；
+    2. **随工具分发**的 ffmpeg（自包含发布，见 :func:`_bundled_ffmpeg`）；
+    3. 系统 PATH（兜底）。
 
     结果进程内缓存，避免每个视频都重复探测。
     """
@@ -99,6 +130,8 @@ def ffmpeg_exe() -> str | None:
             exe = candidate
     except Exception:
         exe = ""
+    if not exe:
+        exe = _bundled_ffmpeg()
     if not exe:
         exe = shutil.which("ffmpeg") or ""
     _FFMPEG_CACHE = exe

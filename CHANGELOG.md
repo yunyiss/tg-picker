@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-10-14（发布准备：ffmpeg 支持「随工具分发」）
+
+### 背景
+目标发布形态是"独立可执行包"：用户下载即用、不装任何系统依赖。为此工具需要能定位
+**随自己分发**的 ffmpeg（自包含的裁剪版），而不是只认 imageio-ffmpeg 或系统 PATH。
+
+### 修改
+`cache_source.ffmpeg_exe()` 查找顺序改为：imageio-ffmpeg（开发）→ **自带 ffmpeg**
+（`_bundled_ffmpeg()`：优先 `sys._MEIPASS`，其次 exe 所在目录）→ 系统 PATH（兜底）。
+开发环境行为不变（imageio 优先）。
+
+### 验证
+- `ruff` / `mypy` 全绿；`pytest` 通过。
+- 打包实测：裁剪版 ffmpeg（**4.7 MB**，完整版 83.6 MB）随包分发后，在屏蔽 imageio 的
+  情况下，工具自身代码路径能找到并驱动它抽帧（mp4 / mkv / webm 均通过）。
+
 ## 2026-10-13（重构：收敛三个界面重复的 ttk 样式代码）
 
 ### 背景
