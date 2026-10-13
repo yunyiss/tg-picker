@@ -55,6 +55,10 @@ tg-scoop-output/
 # 无控制台启动时的报错日志目录（两个工具各一份）
 logs/
 
+# ---- 打包 / 构建产物（PyInstaller 等生成的发布包，不入库）----
+dist/
+build/
+
 # ---- 编辑器 / 系统 ----
 .vscode/
 .idea/
