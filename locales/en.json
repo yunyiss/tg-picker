@@ -3,6 +3,13 @@
   "app.online_title": "TG Media Picker",
   "app.launcher_title": "TG Media Picker",
 
+  "firstrun.title": "Data location",
+  "firstrun.intro": "Choose where this tool stores its config, cache and logs (delete that folder to clean everything up):",
+  "firstrun.portable_title": "Portable (recommended)",
+  "firstrun.portable_desc": "Stored in a data folder next to the program; deleting the program folder removes everything — good if you delete the tool after use.",
+  "firstrun.userdir_title": "User directory",
+  "firstrun.userdir_desc": "Stored in the system user data directory; your config survives moving or upgrading the program.",
+
   "lang.label": "Language",
 
   "launch.heading": "Choose a mode",

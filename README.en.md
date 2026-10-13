@@ -204,6 +204,8 @@ never scrolled past in the client).
 | `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O / hardware detection, concurrency tier recommendation and low-spec clamping) and shared constants |
 | `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by all three screens |
 | `ui_style.py` | Shared ttk style builders for the three screens (clam theme and segmented buttons; colors are per-screen) |
+| `app_paths.py` | "Data directory" resolution: portable (a `data/` folder next to the program) / user directory, cross-platform; locates all runtime artifacts |
+| `firstrun.py` | First-run dialog to choose where data is stored (portable / user directory) |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
 | `run.cmd` | Launcher script (calls `launcher.py`) |
@@ -214,9 +216,16 @@ never scrolled past in the client).
 | `CHANGELOG.md` | Change log (Chinese) |
 | `README.en.md` | This English document |
 
-**Generated at runtime, not tracked in version control**:
+**Runtime artifacts: written to the "data directory" (not tracked in version control)**:
 
-| Path | Notes |
+On first run you choose where data is stored (delete that folder to clean everything up):
+
+- **Portable** (recommended): a `data/` folder next to the program — deleting the program folder
+  removes everything;
+- **User directory**: Windows `%APPDATA%\tg-picker`, macOS `~/Library/Application Support/tg-picker`,
+  Linux `~/.local/share/tg-picker` — config survives moving/upgrading the program.
+
+| Path (inside the data directory) | Notes |
 |---|---|
 | `cache_thumbs/` | Thumbnail cache (safe to delete; rebuilt automatically) |
 | `cache_index.json` | Cache index (deleting it forces a full re-decrypt) |
@@ -224,7 +233,10 @@ never scrolled past in the client).
 | `cache_config.json` | Remembers the last paths and preferences |
 | `language.json` | Language preference (shared by both tools) |
 | `logs/` | Startup and error log (written by the app when it runs without a console — check here first if a tool will not start) |
-| `tg_picker.session`, `config.json` | Session and credentials for the online picker (**do not share**) |
+| `tg_picker_session.session`, `config.json` | Session and credentials for the online picker (**do not share**) |
+
+> The choice is recorded in `app_location.json` next to the program; if the program folder is not
+> writable, portable mode falls back to the user directory automatically.
 
 ---
 
@@ -259,7 +271,8 @@ dialog update live) with no restart required.
 
 ### Where the preference is stored
 
-The language preference lives in **`language.json`** in the project root:
+The language preference lives in **`language.json`** inside the **data directory**
+(see section 4; in portable mode that is the `data/` folder next to the program):
 
 ```json
 { "lang": "zh" }
@@ -355,6 +368,8 @@ tg-picker/
 ├─ cache_picker.py / tg_picker.py the two modes (GUI)
 ├─ cache_source.py                cache decryption and indexing (must stay next to _vendor/)
 ├─ i18n.py                        translation core
+├─ app_paths.py                    data-directory resolution (portable / user directory)
+├─ firstrun.py                     first-run data-location chooser
 ├─ ui_kit.py / ui_lang.py / ui_style.py   shared helpers, language mechanism, style builders
 ├─ locales/                       language resources (zh.json / en.json)
 ├─ _vendor/tg_scoop/              decryption core (verbatim upstream copy)

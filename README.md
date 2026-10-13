@@ -167,6 +167,8 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `ui_kit.py` | 与界面无关的通用工具（`human_size` / `unique_path` / 配置读写 / 硬件检测、并发档位推荐与低配钳制）与共享常量 |
 | `ui_lang.py` | 语言切换的界面机制（`LangMixin`），三个界面共用 |
 | `ui_style.py` | 三个界面共用的 ttk 样式构造（clam 主题与分段按钮；颜色由各界面自定） |
+| `app_paths.py` | 「数据目录」解析：便携（程序旁 `data/`）/ 用户目录，跨平台；供所有运行时产物定位 |
+| `firstrun.py` | 首次启动的数据存放位置选择对话框（便携 / 用户目录） |
 | `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run.cmd` | 启动脚本（调用 `launcher.py`） |
@@ -177,9 +179,15 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `CHANGELOG.md` | 变更记录（中文） |
 | `README.en.md` | 本说明的英文版 |
 
-**运行时自动生成、不入版本库**：
+**运行时产物：写入「数据目录」（不入版本库）**：
 
-| 路径 | 说明 |
+首次启动会让您选择数据存放位置（删掉该目录即可清除全部痕迹）：
+
+- **便携**（推荐）：程序旁边的 `data/` 文件夹——删掉程序目录即清除全部痕迹；
+- **用户目录**：Windows `%APPDATA%\tg-picker`、macOS `~/Library/Application Support/tg-picker`、
+  Linux `~/.local/share/tg-picker`——移动/升级程序时不丢配置。
+
+| 路径（在数据目录下） | 说明 |
 |---|---|
 | `cache_thumbs/` | 缩略图缓存（可删，会自动重建） |
 | `cache_index.json` | 缓存索引（删掉后会重新解密一遍） |
@@ -187,7 +195,9 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `cache_config.json` | 记住上次的路径与偏好 |
 | `language.json` | 语言偏好（两个工具共享） |
 | `logs/` | 启动与报错日志（无控制台启动时由程序写入，打不开工具时先看这里） |
-| `tg_picker.session`、`config.json` | 在线挑选器的会话与凭据（**勿外传**） |
+| `tg_picker_session.session`、`config.json` | 在线挑选器的会话与凭据（**勿外传**） |
+
+> 位置选择记录在**程序目录**旁的 `app_location.json`；程序目录不可写时便携模式自动回退用户目录。
 
 ---
 
@@ -220,7 +230,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ### 语言偏好存在哪
 
-语言偏好保存在项目根目录的 **`language.json`**：
+语言偏好保存在**数据目录**下的 **`language.json`**（见第四节；便携模式下即程序旁的 `data/`）：
 
 ```json
 { "lang": "zh" }
@@ -305,6 +315,8 @@ tg-picker/
 ├─ cache_picker.py / tg_picker.py 两个模式（GUI）
 ├─ cache_source.py                缓存解密与索引（必须与 _vendor/ 同级）
 ├─ i18n.py                        翻译内核
+├─ app_paths.py                   数据目录解析（便携 / 用户目录）
+├─ firstrun.py                    首次启动的数据位置选择
 ├─ ui_kit.py / ui_lang.py / ui_style.py   共享工具、语言机制与样式构造
 ├─ locales/                       语言资源（zh.json / en.json）
 ├─ _vendor/tg_scoop/              解密内核（上游原样副本）

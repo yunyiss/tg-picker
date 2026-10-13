@@ -35,6 +35,7 @@ from PIL import Image, ImageTk
 
 import app_paths
 import cache_source as cs
+import firstrun
 import i18n
 import ui_kit
 import ui_style
@@ -1941,8 +1942,9 @@ class CacheApp(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
-    ui_kit.enable_file_log(app_paths.data_dir() / "logs" / "cache_picker.log")
     root = tk.Tk()
+    firstrun.ensure_choice(root)          # 首次启动先确定数据目录
+    ui_kit.enable_file_log(app_paths.data_dir() / "logs" / "cache_picker.log")
     CacheApp(root)
     root.mainloop()
 

@@ -3,6 +3,13 @@
   "app.online_title": "TG 图片挑选下载器",
   "app.launcher_title": "TG 图片挑选器",
 
+  "firstrun.title": "数据存放位置",
+  "firstrun.intro": "选择本工具保存配置、缓存与日志的位置（删除该目录即可清除全部痕迹）：",
+  "firstrun.portable_title": "便携（推荐）",
+  "firstrun.portable_desc": "存在程序旁边的 data 文件夹；删掉程序目录即可清除全部痕迹，适合用完即删。",
+  "firstrun.userdir_title": "用户目录",
+  "firstrun.userdir_desc": "存在系统用户数据目录；移动或升级程序时不丢配置。",
+
   "lang.label": "语言",
 
   "launch.heading": "选择启动模式",
