@@ -19,6 +19,7 @@ import concurrent.futures
 import os
 import queue
 import shutil
+import subprocess
 import sys
 import threading
 import time
@@ -36,7 +37,14 @@ import cache_source as cs
 import i18n
 import ui_kit
 from i18n import t
-from ui_kit import FONT, human_size, unique_path
+from ui_kit import (
+    FONT,
+    detect_hardware,
+    gear_workers,
+    human_size,
+    recommended_workers,
+    unique_path,
+)
 from ui_lang import LangMixin
 
 HERE = Path(__file__).resolve().parent
@@ -62,6 +70,21 @@ _LEGACY_SORT = {
     "大小 小→大": "size_asc",
     "来源目录": "source",
 }
+
+# 导出内容（内部键，文案走 kind.*）：与显示文案分离，逻辑只看键。
+KIND_VALUES = ("all", "image", "video")
+
+# 输出类型（可单独勾选的**扫描格式**）：内部值即扩展名（含点），与
+# ``cache_source.sniff()`` 的返回值一一对应；显示名去掉前导点。
+# 与上游 tg-scoop 的 9 种 MediaType 一致（未勾选的格式在扫描时被早停跳过）。
+FORMATS = (
+    ".mp4", ".webm", ".avi", ".mkv", ".mov",     # 视频
+    ".jpg", ".png", ".gif", ".webp",             # 图片
+)
+
+# 性能档位（内部键，文案走 gear.*）：控制后台缩略图工作线程数。
+# 移植自上游 tg-scoop 的三档：保守=串行、均衡=推荐、极速=满核。
+GEAR_KEYS = ("conservative", "balanced", "turbo")
 
 # ---------------------------------------------------------------------------
 # 视觉规范
@@ -146,8 +169,13 @@ class MediaItem:
 # ---------------------------------------------------------------------------
 # 读取与保存（纯函数，便于自检）
 # ---------------------------------------------------------------------------
-def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None):
-    """读取并解析缓存，返回 (条目, 统计)。"""
+def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None,
+               exts: tuple[str, ...] | None = None):
+    """读取并解析缓存，返回 (条目, 统计)。
+
+    ``exts`` 为可选的输出格式过滤（扩展名集合，None=不过滤），只在嗅探命中后
+    按格式早停，见 :func:`cache_source.prepare`。
+    """
     return cs.prepare(
         tdata=tdata,
         passcode=passcode,
@@ -155,6 +183,7 @@ def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None):
         thumb_dir=THUMB_DIR,
         progress_cb=progress_cb,
         cancel_event=cancel_event,
+        exts=exts,
     )
 
 
@@ -267,7 +296,12 @@ class CacheApp(LangMixin):
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.ui_q: queue.Queue = queue.Queue()
-        self.pool = concurrent.futures.ThreadPoolExecutor(max_workers=4)
+        self.pool: concurrent.futures.ThreadPoolExecutor | None = None
+
+        # 硬件检测（提示性质，失败按未知处理）：决定性能档位的推荐值与标签文案
+        self.hw = detect_hardware()
+        self.hw_cores = self.hw.cores or 1
+        self.hw_rec = recommended_workers(self.hw)
 
         self.all_items: list[MediaItem] = []
         self.items: list[MediaItem] = []
@@ -328,7 +362,8 @@ class CacheApp(LangMixin):
         self.root.bind("<Escape>", lambda e: self.on_clear_sel())
         self._pump_job = self.root.after(60, self._pump)
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
-        self.root.after(250, self.on_load)
+        # 刻意**不**自动读取缓存：解密/出缩略图是本工具最重的一步，
+        # 交给用户点「读取缓存」触发（延迟提取，避免打开即全量扫描）。
 
     # ------------------------- 界面 -------------------------
     def _build_style(self) -> None:
@@ -510,12 +545,16 @@ class CacheApp(LangMixin):
         """重算缓存挑选器特有的动态文案。
 
         通用部分（静态登记、状态栏重放、标题、语言按钮）由 LangMixin.retranslate
-        统一处理，这里只补：排序下拉、类型分段按钮、Canvas 角标、计数/概览。
+        统一处理，这里只补：排序/类型/档位下拉、Canvas 角标、计数/概览。
         """
         # 排序下拉：先写 values 再回显（readonly 下先 set 会被复位）
         self.cb_sort.configure(values=[t(f"sort.{k}") for k in SORT_KEYS])
         self.cb_sort.set(t(f"sort.{self.v_sort.get()}"))
-        self._sync_kind_buttons()          # 含三个分段按钮的文案
+        # 输出类型 / 性能档位下拉：同样先写 values 再回显（档位文案含线程数）
+        self.cb_kind.configure(values=[t(f"kind.{k}") for k in KIND_VALUES])
+        self.cb_kind.set(t(f"kind.{self.v_kind.get()}"))
+        self.cb_gear.configure(values=self._gear_labels())
+        self.cb_gear.set(self._gear_label(self.v_gear.get()))
         # 网格里的视频角标是 Canvas 图元，文案只在新建时设过，需显式重设
         for cell in self.cell_pool:
             if cell.get("tag_txt") is not None:
@@ -546,10 +585,10 @@ class CacheApp(LangMixin):
         self.e_tdata = ttk.Entry(r1)
         self.e_tdata.pack(side="left", fill="x", expand=True, padx=(8, 8))
         self._T(ttk.Button(r1, command=self.on_browse), "common.browse").pack(side="left")
-        self.b_load = self._T(
+        self.b_scan = self._T(
             ttk.Button(r1, style="Accent.TButton", command=self.on_load),
-            "cache.setup.load_btn")
-        self.b_load.pack(side="left", padx=(8, 0))
+            "cache.setup.scan_btn")
+        self.b_scan.pack(side="left", padx=(8, 0))
 
         # 第二行：可选密码 + 只读提示（提示只在此处出现一次）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
@@ -566,6 +605,22 @@ class CacheApp(LangMixin):
         self.b_clean.pack(side="left", padx=(8, 0))
         self._T(ttk.Label(r2, style="Hint.TLabel"), "cache.setup.hint").pack(
             side="left", padx=(12, 0))
+
+        # 第三行：输出类型（**扫描格式**）——9 个勾选框，默认全勾（与上游一致）。
+        # 未勾选的格式在扫描时被早停跳过，不参与解密/缩略图，也不会出现在网格里。
+        r3 = ttk.Frame(wrap, style="Panel.TFrame")
+        r3.pack(fill="x", pady=(10, 0))
+        self._T(ttk.Label(r3, style="Field.TLabel", width=14),
+                "cache.setup.formats_label").pack(side="left", anchor="n")
+        grid = ttk.Frame(r3, style="Panel.TFrame")
+        grid.pack(side="left")
+        self.v_formats: dict[str, tk.BooleanVar] = {}
+        for i, ext in enumerate(FORMATS):
+            var = tk.BooleanVar(value=True)
+            ttk.Checkbutton(grid, text=ext.lstrip("."), variable=var,
+                            style="TCheckbutton").grid(
+                row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
+            self.v_formats[ext] = var
         self._divider()
 
     # ---------- 筛选栏（独立一档背景）----------
@@ -576,19 +631,16 @@ class CacheApp(LangMixin):
         row = ttk.Frame(wrap, style="Bar.TFrame")
         row.pack(fill="x")
 
-        # 类型：分段按钮（clam 单选钮无法配色，故用按钮表达选中态）
+        # 导出内容：下拉（内部键 all/image/video，文案随语言变化）。
+        # 决定**预览显示与导出**的范围（扫描范围由上面的「输出类型」复选决定）。
         self._T(ttk.Label(row, style="BarField.TLabel"),
-                "cache.toolbar.kind_label").pack(side="left")
-        self.v_kind = tk.StringVar(value="image")
-        self._kind_btns: dict[str, ttk.Button] = {}
-        kind_box = ttk.Frame(row, style="Bar.TFrame")
-        kind_box.pack(side="left", padx=(8, 20))
-        for val in ("image", "video", "all"):
-            b = ttk.Button(kind_box, text=t(f"kind.{val}"), style="Seg.TButton",
-                           command=lambda v=val: self.on_kind_change(v))
-            b.pack(side="left", padx=(0, 6))
-            self._kind_btns[val] = b
-        self._sync_kind_buttons()
+                "cache.toolbar.export_label").pack(side="left")
+        self.v_kind = tk.StringVar(value="all")
+        self.cb_kind = ttk.Combobox(row, width=10, state="readonly",
+                                    values=[t(f"kind.{k}") for k in KIND_VALUES])
+        self.cb_kind.set(t("kind.all"))
+        self.cb_kind.pack(side="left", padx=(8, 20))
+        self.cb_kind.bind("<<ComboboxSelected>>", lambda e: self.on_kind_change())
 
         self._T(ttk.Label(row, style="BarField.TLabel"),
                 "cache.toolbar.sort_label").pack(side="left")
@@ -602,6 +654,16 @@ class CacheApp(LangMixin):
         self.cb_sort.pack(side="left", padx=(8, 20))
         self.cb_sort.bind("<<ComboboxSelected>>", lambda e: self.on_sort_change())
 
+        # 性能档位：下拉，控制后台缩略图工作线程数（内部键 conservative/balanced/turbo）
+        self._T(ttk.Label(row, style="BarField.TLabel"),
+                "cache.toolbar.gear_label").pack(side="left")
+        self.v_gear = tk.StringVar(value="balanced")
+        self.cb_gear = ttk.Combobox(row, width=16, state="readonly",
+                                    values=self._gear_labels())
+        self.cb_gear.set(self._gear_label("balanced"))
+        self.cb_gear.pack(side="left", padx=(8, 0))
+        self.cb_gear.bind("<<ComboboxSelected>>", lambda e: self.on_gear_change())
+
         # 搜索靠右，与筛选区分开
         self._T(ttk.Button(row, command=self.on_clear_search),
                 "cache.toolbar.clear_search").pack(side="right")
@@ -611,12 +673,42 @@ class CacheApp(LangMixin):
         self._T(ttk.Label(row, style="BarField.TLabel"),
                 "cache.toolbar.search_label").pack(side="right")
 
-    def _sync_kind_buttons(self) -> None:
-        """同步类型分段按钮的**文案**与选中样式（语言切换后也要跟着变）。"""
-        cur = self.v_kind.get()
-        for val, btn in self._kind_btns.items():
-            btn.configure(text=t(f"kind.{val}"),
-                          style="SegOn.TButton" if val == cur else "Seg.TButton")
+    # ---------- 性能档位 ----------
+    def _gear_workers(self, key: str) -> int:
+        """档位内部键 → 后台工作线程数（保守 1 / 均衡 推荐 / 极速 满核）。
+
+        低配钳制（核数未知 → 1；内存 <4GB 时极速不跑满核）见 ``ui_kit.gear_workers``，
+        避免低配置设备因线程设置过高出现运行异常。
+        """
+        return gear_workers(key, self.hw, self.hw_rec)
+
+    def _gear_label(self, key: str) -> str:
+        """档位内部键 → 当前语言下的下拉文案（含线程数）。"""
+        return t(f"gear.{key}", n=self._gear_workers(key))
+
+    def _gear_labels(self) -> list[str]:
+        """三档的下拉文案列表，顺序与 GEAR_KEYS 一致。"""
+        return [self._gear_label(k) for k in GEAR_KEYS]
+
+    def on_gear_change(self) -> None:
+        """性能档位下拉：记住选择，空闲时立即按新线程数重建工作线程池。"""
+        idx = self.cb_gear.current()
+        if 0 <= idx < len(GEAR_KEYS):
+            self.v_gear.set(GEAR_KEYS[idx])
+        save_config({"gear": self.v_gear.get()})
+        if not self.busy:
+            self._apply_gear()
+
+    def _apply_gear(self) -> None:
+        """按当前档位重建后台工作线程池（旧的整体关停，已排队的取消）。"""
+        old = self.pool
+        self.pool = concurrent.futures.ThreadPoolExecutor(
+            max_workers=self._gear_workers(self.v_gear.get()))
+        if old is not None:
+            try:
+                old.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
 
     def on_sort_change(self) -> None:
         """下拉选择 → 映射回内部键（文案随语言变，逻辑只看键）。"""
@@ -627,11 +719,14 @@ class CacheApp(LangMixin):
             self.v_sort.set("date_desc")
         self.on_filter_change()
 
-    def on_kind_change(self, val: str) -> None:
-        if self.v_kind.get() == val:
-            return
-        self.v_kind.set(val)
-        self._sync_kind_buttons()
+    def on_kind_change(self) -> None:
+        """输出类型下拉：切换显示筛选（数据已读时即时生效）。
+
+        类型同时是「读取缓存」的提取范围——若想只提取某一类，先在此选好再点读取。
+        """
+        idx = self.cb_kind.current()
+        if 0 <= idx < len(KIND_VALUES):
+            self.v_kind.set(KIND_VALUES[idx])
         self.on_filter_change()
 
     # ---------- 底部操作条 ----------
@@ -666,6 +761,10 @@ class CacheApp(LangMixin):
         self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
         self._T(ttk.Button(r2, command=self.on_pick_out), "common.browse").pack(
             side="left", padx=(0, 8))
+        # 打开目录：用系统文件管理器打开「保存到」目录（失败时回退复制路径）
+        self.b_open = self._T(ttk.Button(r2, command=self.on_open_dir),
+                              "cache.bottom.open_dir")
+        self.b_open.pack(side="left", padx=(0, 8))
         self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
                                  command=self.on_save)
         self.b_save.pack(side="left", padx=(12, 0))
@@ -778,12 +877,27 @@ class CacheApp(LangMixin):
         out = cfg.get("out_dir") or str(HERE / t("cache.default_out_dir"))
         self.e_out.delete(0, "end")
         self.e_out.insert(0, out)
-        if cfg.get("kind"):
+        if cfg.get("kind") in KIND_VALUES:
             self.v_kind.set(cfg["kind"])
         if cfg.get("sort"):
             self.v_sort.set(self._migrate_sort(str(cfg["sort"])))
+        # 输出类型（扫描格式）：按保存的列表回填；缺失/为空则维持默认全勾
+        saved_fmts = cfg.get("formats")
+        if isinstance(saved_fmts, (list, tuple)):
+            keep = [e for e in FORMATS if e in saved_fmts]
+            if keep:
+                for ext, var in self.v_formats.items():
+                    var.set(ext in keep)
+        # 性能档位：**启动时按硬件检测结果自动匹配**——无有效保存值时用推荐档
+        # （均衡=推荐线程数）；保存值仍经 ui_kit.gear_workers 的低配钳制，
+        # 避免低配设备因线程设置过高出现运行异常。
+        if cfg.get("gear") in GEAR_KEYS:
+            self.v_gear.set(cfg["gear"])
         # 下拉回显当前键对应的文案（语言切换时由 retranslate 重设）
+        self.cb_kind.set(t(f"kind.{self.v_kind.get()}"))
         self.cb_sort.set(t(f"sort.{self.v_sort.get()}"))
+        self.cb_gear.set(self._gear_label(self.v_gear.get()))
+        self._apply_gear()           # 先建好工作线程池（此前为 None），供缩略图加载用
         if cfg.get("by_date") is not None:
             self.v_bydate.set(bool(cfg["by_date"]))
 
@@ -796,18 +910,28 @@ class CacheApp(LangMixin):
             self.e_tdata.insert(0, chosen)
 
     def on_load(self) -> None:
-        """读取缓存：校验路径后在后台线程解密/索引，完成后经队列回到主线程。"""
+        """开始扫描：**用户显式触发**，按勾选的「输出类型」限定格式后后台解密/索引。
+
+        不再在打开时自动读取——全量解密与出缩略图是最重的一步，交由用户点击触发；
+        只处理已勾选的格式（未勾选的格式嗅探后早停，不付出解密/缩略图开销）。
+        """
         if self.busy:
             return
         tdata = Path(self.e_tdata.get().strip())
         if not tdata.is_dir():
             messagebox.showwarning(_app_title(), t("cache.dialog.no_tdata"))
             return
+        selected = tuple(ext for ext, var in self.v_formats.items() if var.get())
+        if not selected:
+            messagebox.showwarning(_app_title(), t("cache.dialog.need_format"))
+            return
         self.busy = True
         self.cancel.clear()
         self.set_busy(True)
         self._reset_grid_data()
+        self._apply_gear()           # 档位若在忙碌时改过，这里生效
         passcode = self.e_pass.get()
+        exts = None if len(selected) == len(FORMATS) else selected   # 全勾=不过滤
         t0 = time.time()
 
         def work():
@@ -816,6 +940,7 @@ class CacheApp(LangMixin):
                     tdata, passcode,
                     progress_cb=lambda i, tot, txt: self.ui_q.put(("load_progress", i, tot, txt)),
                     cancel_event=self.cancel,
+                    exts=exts,
                 )
                 self.ui_q.put(("load_done", tdata, entries, stats, passcode, time.time() - t0))
             except cs.PasscodeRequired as exc:
@@ -1554,6 +1679,37 @@ class CacheApp(LangMixin):
             self.e_out.delete(0, "end")
             self.e_out.insert(0, chosen)
 
+    def on_open_dir(self) -> None:
+        """用系统文件管理器打开「保存到」目录（移植自上游的打开目录逻辑）。
+
+        路径不存在时提示先选目录；启动外部程序失败（本机可能对 shell open 受限）
+        时不弹错，回退为把**绝对路径写入剪贴板**并在状态栏提示，保证不崩、可用。
+        """
+        path = Path(self.e_out.get().strip() or str(HERE / t("cache.default_out_dir")))
+        if not path.is_dir():
+            messagebox.showwarning(_app_title(), t("cache.dialog.no_out_dir"))
+            return
+        try:
+            if sys.platform == "win32":
+                os.startfile(path)  # 打开目录是有意的用户动作
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path)])
+        except OSError:
+            self._copy_path_fallback(path)
+        else:
+            self.set_status("cache.status.opened_dir", path=path)
+
+    def _copy_path_fallback(self, path: Path) -> None:
+        """打开目录失败时的兜底：把绝对路径写入剪贴板并提示。"""
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(str(path))
+        except tk.TclError:
+            pass
+        self.set_status("cache.status.path_copied", path=path)
+
     def on_save(self) -> None:
         """保存选中项：二次确认后在后台线程解密写出到输出目录。"""
         if self.busy:
@@ -1698,7 +1854,8 @@ class CacheApp(LangMixin):
         self._hide_progress()
         self.set_status("cache.status.save_done", ok=ok, fail=fail)
         save_config({"out_dir": str(out), "kind": self.v_kind.get(),
-                     "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get())})
+                     "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get()),
+                     "formats": [e for e, v in self.v_formats.items() if v.get()]})
 
     # ------------------------- 状态栏 -------------------------
     def set_status_error(self, key: str, detail: str) -> None:
@@ -1713,7 +1870,7 @@ class CacheApp(LangMixin):
         """切换忙碌态：禁用会引发重入的几个按钮。"""
         state = "disabled" if busy else "normal"
         self.b_save.configure(state=state)
-        self.b_load.configure(state=state)
+        self.b_scan.configure(state=state)
         self.b_reload.configure(state=state)
         self.b_clean.configure(state=state)
 
@@ -1727,10 +1884,11 @@ class CacheApp(LangMixin):
                     self.root.after_cancel(job)
                 except tk.TclError:
                     pass
-        try:
-            self.pool.shutdown(wait=False, cancel_futures=True)
-        except Exception:
-            pass
+        if self.pool is not None:
+            try:
+                self.pool.shutdown(wait=False, cancel_futures=True)
+            except Exception:
+                pass
         self.root.destroy()
 
 

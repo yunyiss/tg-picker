@@ -276,7 +276,12 @@ def sniff(data: bytes) -> tuple[str, str] | None:
     if data[4:8] == b"ftyp":
         return ("video", ".mov") if data[8:12] == b"qt  " else ("video", ".mp4")
     if data[:4] == b"\x1a\x45\xdf\xa3":
-        return "video", ".webm"
+        # EBML 容器：webm 与 matroska(mkv) 靠文件头前段的 DocType 区分；
+        # 都找不到时默认 MKV——这样两种格式才能被分别勾选/过滤（与上游一致）。
+        window = data[:4096]
+        if b"webm" in window:
+            return "video", ".webm"
+        return "video", ".mkv"
     if data[:4] == b"RIFF" and data[8:12] == b"AVI ":
         return "video", ".avi"
     return None
@@ -419,8 +424,15 @@ def prepare(
     thumb_dir: Path,
     progress_cb=None,
     cancel_event=None,
+    exts: tuple[str, ...] | None = None,
 ) -> tuple[list[CacheEntry], dict]:
     """遍历缓存：嗅探类型 → 需要时出缩略图 → 复用/更新索引。
+
+    ``exts`` 为可选的**输出格式过滤**（扩展名集合，含点，如 ``(".jpg", ".png")``；
+    移植自上游 tg-scoop 的 allowed_types，但按**具体格式**而非大类）：
+    None 表示不过滤；给定集合时，嗅探命中但不在集合内的格式**早停**
+    （不解密、不出缩略图、不落索引），只计入 skipped——这样只想扫某几种格式时
+    不会为其它格式付出解密与缩略图开销。
 
     返回 (有效条目, 统计)。
     """
@@ -444,8 +456,15 @@ def prepare(
 
         # 复用：索引有记录 + 文件未变 + （图片需缩略图仍在；视频无需缩略图）
         rec_kind = rec.get("kind") if rec else None
+        rec_ext = rec.get("ext") if rec else None
+        rec_fresh = bool(rec) and abs(float(rec.get("mtime", -1)) - ent.mtime) < 1e-6
+        # 输出格式过滤在**复用路径也要生效**：否则过滤会被"直接复用旧索引"绕过，
+        # 把上次扫描记录下来的其它格式一并返回。
+        if exts is not None and rec_fresh and rec_ext is not None and rec_ext not in exts:
+            stats["skipped"] += 1
+            continue
         thumb_ok = tp.exists() if rec_kind == "image" else True
-        if rec and abs(float(rec.get("mtime", -1)) - ent.mtime) < 1e-6 and thumb_ok:
+        if rec_fresh and thumb_ok:
             ent.kind = rec.get("kind", "")
             ent.ext = rec.get("ext", "")
             ent.size = int(rec.get("size", 0))
@@ -464,6 +483,10 @@ def prepare(
             continue
         hit = sniff(head)
         if hit is None:
+            stats["skipped"] += 1
+            continue
+        if exts is not None and hit[1] not in exts:
+            # 输出格式过滤：与"未识别"同样早停，不读余量、不落盘
             stats["skipped"] += 1
             continue
 

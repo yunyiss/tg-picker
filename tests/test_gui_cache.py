@@ -13,6 +13,7 @@ import pytest
 
 import cache_picker as cp
 import i18n
+import ui_kit
 
 # 阈值：单次可视区刷新耗时上限（毫秒）与图元池上限
 MAX_REFRESH_MS = 60
@@ -23,6 +24,9 @@ MIN_VISIBLE_CELLS = 8
 @pytest.mark.gui
 def test_cache_gui_renders_scrolls_and_switches_language(tdata_dir: Path, tk_root):
     app = cp.CacheApp(tk_root)
+    # 「打开即自动提取」已移除：显式触发读取；并固定类型为"全部"（不依赖本机配置）
+    app.v_kind.set("all")
+    app.on_load()
 
     problems: list[str] = []
     rec: dict[str, object] = {}
@@ -174,3 +178,74 @@ def test_cache_gui_renders_scrolls_and_switches_language(tdata_dir: Path, tk_roo
     assert rec["save_btn_en"] == rec["expected_save_none_en"], rec["save_btn_en"]
     assert rec["items_after_en_sort"] == rec["videos_filtered"], "英文下排序后条数应不变"
     assert rec["count_back_zh"] == rec["count_none_zh"], rec["count_back_zh"]
+
+
+@pytest.mark.gui
+def test_open_dir_falls_back_to_clipboard_when_unavailable(tk_root, tmp_path, monkeypatch):
+    """打开目录失败时回退：把绝对路径写入剪贴板并在状态栏提示（不弹错、不崩）。"""
+    app = cp.CacheApp(tk_root)
+    out = tmp_path / "picked"
+    out.mkdir()
+    app.e_out.delete(0, "end")
+    app.e_out.insert(0, str(out))
+
+    def blocked(*_args, **_kwargs):
+        raise OSError("shell open is blocked on this machine")
+
+    monkeypatch.setattr(cp.os, "startfile", blocked, raising=False)
+    monkeypatch.setattr(cp.subprocess, "Popen", blocked)
+
+    app.on_open_dir()
+    assert app.root.clipboard_get() == str(out), "未回退复制绝对路径"
+    assert str(out) in app.l_status.cget("text"), "状态栏未提示已复制"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_open_dir_warns_when_folder_missing(tk_root, tmp_path, monkeypatch):
+    """目录不存在时提示先选目录，且不尝试打开。"""
+    app = cp.CacheApp(tk_root)
+    app.e_out.delete(0, "end")
+    app.e_out.insert(0, str(tmp_path / "does-not-exist"))
+    warns: list[str] = []
+    monkeypatch.setattr(cp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    copied: list[str] = []
+    monkeypatch.setattr(app, "_copy_path_fallback", lambda p: copied.append(str(p)))
+    app.on_open_dir()
+    assert warns, "目录不存在时应弹提示"
+    assert copied == [], "目录不存在时不应尝试打开或复制"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_scan_requires_at_least_one_format(tk_root, tmp_path, monkeypatch):
+    """一个输出类型都没勾时：提示且不发起扫描（不进入忙碌态）。"""
+    app = cp.CacheApp(tk_root)
+    app.e_tdata.delete(0, "end")
+    app.e_tdata.insert(0, str(tmp_path))          # 保证通过路径校验，命中格式校验
+    for var in app.v_formats.values():
+        var.set(False)
+    warns: list[str] = []
+    monkeypatch.setattr(cp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    app.on_load()
+    assert warns, "未勾选任何输出类型时应提示"
+    assert app.busy is False, "未勾选格式时不应进入忙碌态"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_output_formats_default_all_and_gear_clamped(tk_root):
+    """输出类型默认全勾（9 种格式）；档位线程数经低配钳制。"""
+    app = cp.CacheApp(tk_root)
+    assert tuple(app.v_formats) == cp.FORMATS
+    assert all(v.get() for v in app.v_formats.values()), "输出类型应默认全勾"
+
+    assert app._gear_workers("conservative") == 1
+    assert app._gear_workers("balanced") == app.hw_rec
+    # 模拟低配（内存 2GB / 32 核）：极速档被钳制到推荐值，而不是跑满 32 线程
+    app.hw = ui_kit.HardwareInfo(cores=32, ram_gb=2.0)
+    app.hw_rec = ui_kit.recommended_workers(app.hw)
+    assert app._gear_workers("turbo") == app.hw_rec
+    app._on_close()

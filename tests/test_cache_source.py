@@ -38,6 +38,11 @@ def test_sniff_recognizes_media_types():
     assert cs.sniff(b"\x89PNG\r\n\x1a\n" + b"\x00" * 8) == ("image", ".png")
     assert cs.sniff(b"\x00\x00\x00\x18ftypmp42") == ("video", ".mp4")
     assert cs.sniff(b"\x00\x00\x00\x18ftypqt  ") == ("video", ".mov")
+    assert cs.sniff(b"RIFF\x00\x00\x00\x00AVI ") == ("video", ".avi")
+    # EBML 容器：webm / mkv 靠 DocType 区分（缺失时默认 mkv），这样才能分别勾选
+    assert cs.sniff(b"\x1a\x45\xdf\xa3" + b"\x00" * 20 + b"webm") == ("video", ".webm")
+    assert cs.sniff(b"\x1a\x45\xdf\xa3" + b"\x00" * 20 + b"matroska") == ("video", ".mkv")
+    assert cs.sniff(b"\x1a\x45\xdf\xa3" + b"\x00" * 40) == ("video", ".mkv")
     assert cs.sniff(b"not-a-media!") is None
 
 

@@ -41,6 +41,27 @@ def test_load_cache_decodes_media(tdata_dir: Path):
     assert all(i.name.startswith("tg_") for i in items[:5])
 
 
+def test_load_cache_filters_by_format(tdata_dir: Path):
+    """输出格式过滤（按**具体格式**早停）：只解出所选格式，未勾选的被计 skipped。"""
+    img_exts = (".jpg", ".png", ".gif", ".webp")
+    entries, stats = cp.load_cache(tdata_dir, "", exts=img_exts)
+    assert stats["failed"] == 0
+    items = [cp.MediaItem(entry=e) for e in entries]
+    assert items, "只扫图片格式后仍应有条目"
+    assert all(i.entry.ext in img_exts for i in items), "过滤后混入了未勾选的格式"
+    assert all(i.kind == "image" for i in items)
+    # 与不过滤相比，跳过的条目不会更少（其它格式被计入 skipped）
+    _, stats_all = cp.load_cache(tdata_dir, "")
+    assert stats["skipped"] >= stats_all["skipped"]
+
+
+def test_load_cache_excludes_webm(tdata_dir: Path):
+    """需求的直接场景：不勾选 webm 时，webm 不被扫描识别（也不会混进结果）。"""
+    entries, _ = cp.load_cache(tdata_dir, "", exts=(".mp4", ".jpg", ".png"))
+    items = [cp.MediaItem(entry=e) for e in entries]
+    assert all(i.entry.ext != ".webm" for i in items), "未勾选 webm 却仍被扫出来"
+
+
 def test_thumbnails_are_cached_on_disk(tdata_dir: Path):
     """图片缩略图应落盘（重复启动才可能秒开）。"""
     entries, _ = cp.load_cache(tdata_dir, "")

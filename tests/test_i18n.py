@@ -23,7 +23,7 @@ T_CALL_RE = re.compile(r"\bt\(\s*[\"']([A-Za-z][\w.]*)[\"']")
 # CJK 及全角标点
 CJK_RE = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
 # 运行时拼接的动态键，字面量扫描抓不到，单独枚举校验
-DYNAMIC_PREFIX = ("sort.", "kind.")
+DYNAMIC_PREFIX = ("sort.", "kind.", "gear.")
 KIND_KEYS = ("image", "video", "file", "all")
 
 
@@ -82,7 +82,9 @@ def test_source_coverage():
     assert not unused, f"资源键未被任何源码引用（疑似拼写错误或废弃）：{unused}"
     # 动态拼接键
     import cache_picker as cp
-    for key in [f"sort.{k}" for k in cp.SORT_KEYS] + [f"kind.{k}" for k in KIND_KEYS]:
+    for key in ([f"sort.{k}" for k in cp.SORT_KEYS]
+                + [f"kind.{k}" for k in KIND_KEYS]
+                + [f"gear.{k}" for k in cp.GEAR_KEYS]):
         assert key in ZH and key in EN, f"动态键缺少资源：{key}"
 
 

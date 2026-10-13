@@ -103,15 +103,25 @@ bulk-export with another tool first.
 2. Confirm the `tdata folder` (the official install location and common portable
    locations are probed automatically; you can also click **Browse**); if you set a
    Telegram **passcode**, enter it
-3. Click **Load cache** — about 15 seconds the first time (thumbnails are generated),
-   then roughly 0.6 seconds on later launches
-4. Pick from the thumbnail wall:
+3. **Output types** — all 9 formats are checked by default (mp4 / webm / avi / mkv / mov /
+   jpg / png / gif / webp); uncheck the ones you don't want, and unchecked formats are
+   **never scanned** (no decryption, no thumbnails). The **Export** dropdown
+   (All / Images / Videos) sets what is previewed and exported. The **Performance** gear
+   (Conservative 1 thread / Balanced recommended / Turbo all cores) sets the background
+   thumbnail worker count and is auto-matched to this machine's hardware on launch
+   (low-spec devices are clamped so it never over-threads)
+4. Click **Start scan** — nothing is scanned automatically on launch (so it never
+   decrypts everything on startup); about 15 seconds the first time (thumbnails are
+   generated), then roughly 0.6 seconds on later launches (incremental index reuse)
+5. Pick from the thumbnail wall:
    - **Click** to select (turns blue with a check); click again to deselect
    - **Shift + click** to select a range
    - **Double-click** to **export** that item into the "Save to" folder (it asks for
      confirmation first; the full path then appears in the status bar)
    - **Ctrl+A** selects all current results / **Esc** clears the selection
-5. Choose the **Save to** folder (you can tick **Split by date**) → click **Save selected**
+6. Choose the **Save to** folder (you can click **Open folder** to open it in the file
+   manager — falling back to copying the path to the clipboard if that fails; and tick
+   **Split by date**) → click **Save selected**
 
 ### Safety boundaries
 
@@ -180,12 +190,12 @@ never scrolled past in the client).
 
 | File | Purpose |
 |---|---|
-| `cache_source.py` | Cache decryption and reading (TDEF, index, thumbnail cache, frame extraction) |
+| `cache_source.py` | Cache decryption and reading (TDEF, index, thumbnail cache, frame extraction, output-format filter) |
 | `launcher.py` | **Unified launcher**: shows the mode-selection screen, then enters the chosen mode |
 | `cache_picker.py` | **Local cache mode** GUI (method ①) |
 | `tg_picker.py` | **API mode** GUI (method ②, Telethon) |
 | `i18n.py` | Internationalization core: loads language resources, `t(key)` lookups, switches language and notifies the UI to refresh |
-| `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O) and shared constants |
+| `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O / hardware detection, concurrency tier recommendation and low-spec clamping) and shared constants |
 | `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by all three screens |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
@@ -372,10 +382,10 @@ python -m venv .venv
 |---|---|---|
 | `tests/test_i18n.py` | identical key sets, identical placeholders, every source key has resources, switching behaviour; walks both UIs in English mode to prove no Chinese remains | no tdata; the last two need a display |
 | `tests/test_cache_source.py` | decryptor discovery, LocalKey derivation, enumerate/decrypt/sniff/thumbnail, index round-trip and invalidation, tdata read-only | real tdata |
-| `tests/test_cache_picker_logic.py` | loading the cache, saving (including no-overwrite on name clash), date subfolders, single-item export, cache cleaning (artifacts only), index reuse rate | real tdata |
-| `tests/test_ui_kit.py` | path helpers: numeric suffix on name clashes, never overwrite an existing file | none |
+| `tests/test_cache_picker_logic.py` | loading the cache, output-type filter, saving (including no-overwrite on name clash), date subfolders, single-item export, cache cleaning (artifacts only), index reuse rate | real tdata |
+| `tests/test_ui_kit.py` | path helpers (numeric suffix, never overwrite); console-less log capture; hardware detection and concurrency tier recommendation | none |
 | `tests/test_gui_online.py` | API mode GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
-| `tests/test_gui_cache.py` | local cache mode GUI: virtualized rendering, scroll performance, selection actions, language switch | real tdata + display |
+| `tests/test_gui_cache.py` | local cache mode GUI: virtualized rendering, scroll performance, selection actions, language switch, open folder (including fallback) | real tdata + display |
 | `tests/test_gui_launcher.py` | unified launcher: mode-selection build, language switch, entering the chosen mode | display (no network) |
 
 - When no tdata is found those tests are **skipped** (not failed); point at one with the

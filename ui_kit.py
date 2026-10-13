@@ -13,7 +13,10 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from i18n import t
@@ -45,6 +48,95 @@ def unique_path(path: Path) -> Path:
         if not cand.exists():
             return cand
     raise RuntimeError(t("common.err_name_conflict", name=path.name))
+
+
+# ---------------------------------------------------------------------------
+# 硬件检测与并发档位推荐（移植自上游 tg-scoop 的 hardware.py）
+#
+# 检测是**提示性质**：任何异常都按"未知"处理，永不阻断主流程；仅标准库。
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class HardwareInfo:
+    """检测结果；未知字段为 None。"""
+
+    cores: int | None
+    ram_gb: float | None
+
+
+def _detect_ram_gb() -> float | None:
+    """读取物理内存总量（GB），任何失败返回 None。"""
+    try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class _MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("ullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+
+            stat = _MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(_MEMORYSTATUSEX)
+            if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return None
+            return stat.ullTotalPhys / (1 << 30)
+        if sys.platform == "darwin":
+            out = subprocess.run(
+                ["sysctl", "-n", "hw.memsize"],
+                capture_output=True, text=True, timeout=5, check=False,
+            )
+            return int(out.stdout.strip()) / (1 << 30)
+        with open("/proc/meminfo", encoding="ascii") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) / (1 << 20)  # kB -> GB
+        return None
+    except Exception:  # noqa: BLE001 —— 检测是提示性质，任何异常都按未知处理
+        return None
+
+
+def detect_hardware() -> HardwareInfo:
+    """检测 CPU 核数与内存；失败字段为 None，永不抛异常。"""
+    try:
+        cores = os.cpu_count()
+    except Exception:  # noqa: BLE001 —— 同上，检测失败按未知处理
+        cores = None
+    return HardwareInfo(cores=cores, ram_gb=_detect_ram_gb())
+
+
+def recommended_workers(info: HardwareInfo) -> int:
+    """推荐并发线程数：min(cores-1, 8)；低内存（<4GB）收敛到 2；保底 1。"""
+    if not info.cores or info.cores <= 1:
+        return 1
+    workers = max(1, min(info.cores - 1, 8))
+    if info.ram_gb is not None and info.ram_gb < 4:
+        workers = min(2, workers)
+    return workers
+
+
+def gear_workers(key: str, info: HardwareInfo, recommended: int | None = None) -> int:
+    """性能档位内部键 → 并发线程数（保守 1 / 均衡推荐 / 极速满核）。
+
+    **低配钳制**（避免线程数过高导致运行异常）：核数未知 → 1；内存 <4GB 时
+    「极速」收敛到推荐值，不跑满核。
+    """
+    rec = recommended if recommended is not None else recommended_workers(info)
+    if key == "conservative":
+        return 1
+    if key == "turbo":
+        if not info.cores:
+            return 1
+        if info.ram_gb is not None and info.ram_gb < 4:
+            return max(1, rec)
+        return max(1, info.cores)
+    return max(1, rec)
 
 
 def enable_file_log(log_path: Path) -> Path | None:

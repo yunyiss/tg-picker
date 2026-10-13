@@ -33,3 +33,38 @@ def test_enable_file_log_redirects_stdout_and_stderr(tmp_path, monkeypatch):
     text = log.read_text(encoding="utf-8")
     assert "走 stdout 的一行" in text
     assert "走 stderr 的一行" in text
+
+
+def test_detect_hardware_never_raises_and_recommends_sane_workers():
+    """硬件检测是提示性质：不抛异常、字段可未知；推荐线程数落在 1..8。"""
+    info = ui_kit.detect_hardware()
+    assert info.cores is None or info.cores >= 1
+    assert info.ram_gb is None or info.ram_gb > 0
+    assert 1 <= ui_kit.recommended_workers(info) <= 8
+
+
+def test_recommended_workers_rules():
+    """搬运自上游 recommended_jobs 的规则：min(cores-1,8)、<4GB 收敛到 2、保底 1。"""
+    H = ui_kit.HardwareInfo
+    assert ui_kit.recommended_workers(H(cores=None, ram_gb=None)) == 1
+    assert ui_kit.recommended_workers(H(cores=1, ram_gb=8.0)) == 1
+    assert ui_kit.recommended_workers(H(cores=2, ram_gb=8.0)) == 1
+    assert ui_kit.recommended_workers(H(cores=16, ram_gb=32.0)) == 8
+    assert ui_kit.recommended_workers(H(cores=16, ram_gb=2.0)) == 2
+
+
+def test_gear_workers_rules_and_low_spec_clamp():
+    """档位线程数：保守 1 / 均衡推荐 / 极速满核；低配（<4GB、核数未知）被钳制。"""
+    H = ui_kit.HardwareInfo
+    hi = H(cores=16, ram_gb=32.0)
+    assert ui_kit.gear_workers("conservative", hi) == 1
+    assert ui_kit.gear_workers("balanced", hi) == 8      # min(16-1, 8)
+    assert ui_kit.gear_workers("turbo", hi) == 16        # 满核
+    # 低内存设备不允许"极速"跑满核
+    lo = H(cores=16, ram_gb=2.0)
+    assert ui_kit.gear_workers("turbo", lo) == ui_kit.recommended_workers(lo) == 2
+    # 核数未知：任何档位都保底 1，避免线程数过高
+    unk = H(cores=None, ram_gb=None)
+    assert ui_kit.gear_workers("conservative", unk) == 1
+    assert ui_kit.gear_workers("balanced", unk) == 1
+    assert ui_kit.gear_workers("turbo", unk) == 1
