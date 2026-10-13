@@ -386,6 +386,26 @@ class CacheReader:
         return head, plain_size
 
 
+_READER_CACHE: dict[tuple[str, str], CacheReader] = {}
+
+
+def get_reader(tdata: Path, passcode: str = "") -> CacheReader:
+    """按 ``(tdata, passcode)`` 复用同一个 :class:`CacheReader`。
+
+    LocalKey 的派生（PBKDF2-HMAC-SHA512）开销不小，而一次会话里会被请求多次
+    （扫描 ``prepare``、保存、扫描完成后回填 GUI 持有的 reader）；不缓存就会
+    重复派生。只保留**最近一个**，避免在内存里同时驻留多份密钥。
+    """
+    key = (str(Path(tdata)), passcode)
+    cached = _READER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    reader = CacheReader(tdata, passcode)
+    _READER_CACHE.clear()
+    _READER_CACHE[key] = reader
+    return reader
+
+
 # ---------------------------------------------------------------------------
 # 索引与缩略图
 # ---------------------------------------------------------------------------
@@ -485,7 +505,7 @@ def prepare(
 
     返回 (有效条目, 统计)。
     """
-    reader = CacheReader(tdata, passcode)
+    reader = get_reader(tdata, passcode)
     old = load_index(index_path, tdata)
     entries = reader.entries()
     total = len(entries)

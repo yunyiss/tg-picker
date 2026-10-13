@@ -1,5 +1,23 @@
 # 变更记录
 
+## 2026-10-13（优化：复用 CacheReader，避免重复派生 LocalKey）
+
+### 背景
+LocalKey 的派生（PBKDF2-HMAC-SHA512）开销不小。一次扫描里它被请求了两次：
+`cache_source.prepare()` 内部新建一个 `CacheReader`，扫描完成后
+`CacheApp._msg_load_done()` 又新建一个——平白多跑一遍 PBKDF2。
+
+### 修改
+新增 `cache_source.get_reader(tdata, passcode)`：按 `(tdata, passcode)` 复用同一个
+`CacheReader`，**只保留最近一个**（避免内存里同时驻留多份密钥）。`prepare()`、
+`CacheApp` 的扫描回填/保存/单条导出，以及 `save_items`/`export_one` 的默认路径
+统一改走它。
+
+### 验证
+- 新增用例 `test_get_reader_reuses_same_instance`：统计 `CacheReader` 构造次数，
+  断言同一 `(tdata, passcode)` 只派生一次、且返回同一实例。
+- `ruff` 全绿；`pytest` 通过。
+
 ## 2026-10-13（修复：等待验证码/密码不再阻塞事件循环）
 
 ### 现象

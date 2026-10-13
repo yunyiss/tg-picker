@@ -196,7 +196,7 @@ def save_items(items, out_dir: Path, tdata: Path, passcode: str,
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     if reader is None:
-        reader = cs.CacheReader(tdata, passcode)
+        reader = cs.get_reader(tdata, passcode)
     ok = fail = 0
     total = len(items)
     for i, it in enumerate(items, 1):
@@ -226,7 +226,7 @@ def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
         target_dir = out_dir / datetime.fromtimestamp(it.mtime).strftime("%Y-%m-%d")
     target_dir.mkdir(parents=True, exist_ok=True)
     if reader is None:
-        reader = cs.CacheReader(tdata, passcode)
+        reader = cs.get_reader(tdata, passcode)
     dest = unique_path(target_dir / it.name)
     dest.write_bytes(reader.decrypt(it.entry.cache_path))
     try:
@@ -1799,7 +1799,7 @@ class CacheApp(LangMixin):
 
         def work():
             try:
-                reader = self.reader or cs.CacheReader(tdata, passcode)
+                reader = self.reader or cs.get_reader(tdata, passcode)
                 ok, fail = save_items(
                     items, Path(out), tdata, passcode, by_date=by_date,
                     progress_cb=lambda d, tot, n: self.ui_q.put(("save_progress", d, tot, n)),
@@ -1861,7 +1861,7 @@ class CacheApp(LangMixin):
         self.set_busy(False)
         self._hide_progress()
         self.all_items = [MediaItem(entry=e) for e in entries]
-        self.reader = cs.CacheReader(tdata, passcode)
+        self.reader = cs.get_reader(tdata, passcode)
         self.apply_filter_sort()
         self.refresh_view()
         self.update_count()          # 同步顶栏概览与计数

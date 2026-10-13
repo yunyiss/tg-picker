@@ -116,3 +116,25 @@ def test_tdata_is_read_only(tdata_dir: Path, tmp_path: Path):
         thumb_dir=tmp_path / "readonly_thumbs",
     )
     assert binlog.stat().st_mtime == before, "binlog 被改动了（应当只读）"
+
+
+def test_get_reader_reuses_same_instance(tdata_dir: Path, monkeypatch):
+    """同一 ``(tdata, passcode)`` 复用同一个 CacheReader（避免重复派生 LocalKey）。
+
+    回归：扫描内部（``prepare``）与 GUI 扫描完成后回填 reader 曾各自新建一次
+    ``CacheReader``，使 PBKDF2 的 LocalKey 派生白跑两遍。
+    """
+    calls: list[tuple[str, str]] = []
+    real = cs.CacheReader
+
+    def counting(tdata, passcode=""):
+        calls.append((str(tdata), passcode))
+        return real(tdata, passcode)
+
+    monkeypatch.setattr(cs, "CacheReader", counting)
+    monkeypatch.setattr(cs, "_READER_CACHE", {})
+
+    r1 = cs.get_reader(tdata_dir, "")
+    r2 = cs.get_reader(tdata_dir, "")
+    assert r1 is r2, "同一 (tdata, passcode) 应复用同一个 reader"
+    assert len(calls) == 1, f"LocalKey 应只派生一次，实际 {len(calls)} 次：{calls}"
