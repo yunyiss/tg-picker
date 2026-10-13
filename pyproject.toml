@@ -50,3 +50,15 @@ testpaths = ["tests"]
 markers = [
     "gui: 需要显示器与 Tk 的界面测试（无显示器会自动跳过）",
 ]
+
+# ---------------------------------------------------------------------------
+# 类型检查：只覆盖"纯逻辑"模块——领域层（cache_source）与共享叶子模块
+# （ui_kit / ui_lang / i18n）。两个 GUI 模块大量使用 Tk 控件对象与回调，
+# 注解收益低而噪声大，暂不纳入；待其属性补齐标注后再逐步扩大范围。
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+files = ["cache_source.py", "ui_kit.py", "ui_lang.py", "i18n.py"]
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true

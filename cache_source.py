@@ -162,7 +162,7 @@ def make_video_thumb(data: bytes, temp_dir: Path | None = None) -> Image.Image |
             try:
                 with Image.open(io.BytesIO(proc.stdout)) as im:
                     im = im.convert("RGB")
-                    im.thumbnail((THUMB, THUMB), Image.LANCZOS)
+                    im.thumbnail((THUMB, THUMB), Image.Resampling.LANCZOS)
                     return im
             except Exception:
                 continue
@@ -295,7 +295,7 @@ def make_thumb(data: bytes, kind: str) -> Image.Image | None:
     try:
         with Image.open(io.BytesIO(data)) as im:
             im = im.convert("RGB")
-            im.thumbnail((THUMB, THUMB), Image.LANCZOS)
+            im.thumbnail((THUMB, THUMB), Image.Resampling.LANCZOS)
             return im
     except Exception:
         return None
@@ -524,7 +524,7 @@ def prepare(
     for idx, ent in enumerate(entries):
         key = hashlib.md5(ent.rel.encode("utf-8", "replace")).hexdigest()
         keys.append(key)
-        rec = old.get(ent.rel)
+        rec = old.get(ent.rel) or {}
         rec_kind = rec.get("kind") if rec else None
         rec_ext = rec.get("ext") if rec else None
         rec_fresh = bool(rec) and abs(float(rec.get("mtime", -1)) - ent.mtime) < 1e-6

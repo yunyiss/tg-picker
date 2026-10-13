@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-10-13（工程化：引入 mypy 类型检查）
+
+### 修改
+- 新增 `[tool.mypy]` 配置：覆盖"纯逻辑"模块（`cache_source` / `ui_kit` /
+  `ui_lang` / `i18n`），开启 `check_untyped_defs`，并 `ignore_missing_imports`
+  （Pillow / telethon 无类型存根）。两个 GUI 模块暂不纳入——Tk 控件对象与回调
+  注解收益低、噪声大——配置里已注明，待其属性补齐标注后再扩大范围。
+- 修正被 mypy 抓出的问题：`Image.LANCZOS` → `Image.Resampling.LANCZOS`
+  （Pillow 存根不再暴露旧常量）；`load_index` 取出的记录用 `or {}` 消除 None
+  联集；`LangMixin` 声明子类提供的 `root` / `busy` / `l_status` 属性；语言按钮
+  改用 `functools.partial`（默认参 lambda 的类型无法推断）。
+- `requirements-dev.txt` 增加 `mypy`；CI 增加 `python -m mypy` 步骤。
+
+### 验证
+- `mypy`：**Success: no issues found in 4 source files**；`ruff` 全绿；
+  `pytest` **49 passed**。
+
 ## 2026-10-13（工程化：ruff 扩展复杂度与命名规则）
 
 ### 修改

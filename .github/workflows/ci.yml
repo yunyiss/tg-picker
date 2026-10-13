@@ -34,5 +34,8 @@ jobs:
       - name: 静态检查（ruff）
         run: python -m ruff check .
 
+      - name: 类型检查（mypy）
+        run: python -m mypy
+
       - name: 测试（跳过需要显示器的 GUI 用例）
         run: python -m pytest -m "not gui" -q

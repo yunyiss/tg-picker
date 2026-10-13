@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import tkinter as tk
 from collections.abc import Callable
+from functools import partial
 from tkinter import ttk
+from typing import Any
 
 import i18n
 from i18n import t
@@ -36,10 +38,15 @@ class LangMixin:
     会互相覆盖。
     """
 
+    # 子类的界面/运行态提供的属性；在此声明，供类型检查识别（不产生运行时副作用）
+    root: tk.Tk
+    busy: bool
+    l_status: ttk.Label
+
     # ---- 生命周期 ----
     def _init_lang_support(self) -> None:
         """初始化文案登记表（须在构建界面之前调用）。"""
-        self._tr_widgets: list[tuple[object, str, dict]] = []
+        self._tr_widgets: list[tuple[Any, str, dict]] = []
         self._lang_btns: dict[str, ttk.Button] = {}
         self._status_fn: Callable[[], str] | None = None
 
@@ -84,7 +91,7 @@ class LangMixin:
                 side="left", padx=(0, 6))
         for code, label in i18n.available().items():
             btn = ttk.Button(box, text=label, style="Seg.TButton", width=8,
-                             command=lambda c=code: self.on_lang_change(c))
+                             command=partial(self.on_lang_change, code))
             btn.pack(side="left", padx=(0, 4))
             self._lang_btns[code] = btn
         self._sync_lang_buttons()
