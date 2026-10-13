@@ -59,6 +59,11 @@ logs/
 dist/
 build/
 
+# ---- 数据目录（app_paths：便携模式下运行时产物落在程序旁的 data/）----
+data/
+# 数据目录位置选择（首次启动写入程序目录）
+app_location.json
+
 # ---- 编辑器 / 系统 ----
 .vscode/
 .idea/

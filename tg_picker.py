@@ -36,6 +36,7 @@ from telethon.tl.types import (
     MessageMediaPhoto,
 )
 
+import app_paths
 import i18n
 import ui_kit
 import ui_style
@@ -44,9 +45,11 @@ from ui_kit import FONT, human_size, unique_path
 from ui_lang import LangMixin
 
 APP_DIR = Path(__file__).resolve().parent
-CONFIG_PATH = APP_DIR / "config.json"
-SESSION_PATH = str(APP_DIR / "tg_picker_session")
-DEFAULT_OUT = APP_DIR / "downloads"
+# 凭据/会话/默认导出目录统一落在「数据目录」（便携=程序旁 data/，否则用户目录）
+DATA_DIR = app_paths.data_dir()
+CONFIG_PATH = DATA_DIR / "config.json"
+SESSION_PATH = str(DATA_DIR / "tg_picker_session")
+DEFAULT_OUT = DATA_DIR / "downloads"
 
 
 def _app_title() -> str:
@@ -1122,7 +1125,7 @@ class App(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
-    ui_kit.enable_file_log(APP_DIR / "logs" / "tg_picker.log")
+    ui_kit.enable_file_log(app_paths.data_dir() / "logs" / "tg_picker.log")
     root = tk.Tk()
     App(root)
     root.mainloop()

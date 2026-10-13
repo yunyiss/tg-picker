@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 import tkinter as tk
 from pathlib import Path
 
@@ -16,6 +17,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+
+# 测试期间把所有运行时产物（缩略图/索引/配置/语言/日志）写到临时目录，
+# 绝不污染项目目录；必须在导入被测模块之前设置。
+os.environ.setdefault("TG_PICKER_DATA_DIR", tempfile.mkdtemp(prefix="tgp-tests-"))
 
 
 def _find_tdata() -> Path | None:

@@ -22,6 +22,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import ttk
 
+import app_paths
 import i18n
 import ui_kit
 import ui_style
@@ -201,7 +202,7 @@ class Launcher(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
-    ui_kit.enable_file_log(HERE / "logs" / "tg_picker.log")
+    ui_kit.enable_file_log(app_paths.data_dir() / "logs" / "tg_picker.log")
     root = tk.Tk()
     Launcher(root)
     root.mainloop()

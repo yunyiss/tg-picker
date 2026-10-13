@@ -1,5 +1,26 @@
 # 变更记录
 
+## 2026-10-14（发布准备：运行时产物统一收敛到「数据目录」）
+
+### 背景
+原先缩略图/索引/配置/语言偏好/日志/会话/默认导出目录都硬编码在项目根（`HERE/…`）。
+发布成独立可执行包后，这些会写进程序内部目录，既不便清理，也不符合"用完即删不留痕"。
+
+### 修改
+- 新增 `app_paths.py`：统一解析"数据目录"——**便携**（`<程序目录>/data`，删程序即删数据）
+  或**用户目录**（Windows `%APPDATA%/tg-picker`、macOS `~/Library/Application Support/tg-picker`、
+  Linux `~/.local/share/tg-picker`）；选择记录在程序目录旁的 `app_location.json`；便携不可写时
+  自动回退用户目录；测试/CI 可用环境变量 `TG_PICKER_DATA_DIR` 覆盖。
+- `i18n`（language.json）、`cache_picker`（thumbs / index / config / tmp_video）、
+  `tg_picker`（config / session / downloads）、三个入口的日志路径，**全部改走数据目录**。
+- `tests/conftest.py` 把测试期数据目录指向临时目录（不污染仓库）；`.gitignore` 忽略
+  `data/` 与 `app_location.json`；`mypy` 覆盖 `app_paths.py`。
+- 首次启动的"位置选择"对话框留待下一步。
+
+### 验证
+- 新增 `tests/test_app_paths.py`（7 条）：模式落盘、便携回退、环境变量覆盖、无选择时需询问等。
+- `ruff` / `mypy`（6 files）全绿；`pytest` **56 passed**。
+
 ## 2026-10-14（发布准备：ffmpeg 支持「随工具分发」）
 
 ### 背景

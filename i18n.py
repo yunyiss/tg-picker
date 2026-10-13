@@ -22,9 +22,16 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
+import app_paths
+
 HERE = Path(__file__).resolve().parent
 LOCALES_DIR = HERE / "locales"
-CONFIG_PATH = HERE / "language.json"   # 两个工具共享的语言偏好
+
+
+def _config_path() -> Path:
+    """语言偏好文件（在数据目录下，随数据目录走：便携=程序旁 data/，否则用户目录）。"""
+    return app_paths.data_dir() / "language.json"
+
 
 DEFAULT = "zh"
 # 语言码 → 切换按钮上的显示名（显示名本身不随语言变化）
@@ -98,7 +105,7 @@ def init() -> str:
     """
     lang = ""
     try:
-        cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        cfg = json.loads(_config_path().read_text(encoding="utf-8"))
         if isinstance(cfg, dict):
             lang = str(cfg.get("lang", ""))
     except Exception:
@@ -109,7 +116,7 @@ def init() -> str:
 def save_language(lang: str) -> None:
     """把语言偏好写入共享配置文件（失败静默忽略）。"""
     try:
-        CONFIG_PATH.write_text(
+        _config_path().write_text(
             json.dumps({"lang": normalize(lang)}, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )

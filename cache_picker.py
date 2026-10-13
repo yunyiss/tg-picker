@@ -33,6 +33,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from PIL import Image, ImageTk
 
+import app_paths
 import cache_source as cs
 import i18n
 import ui_kit
@@ -49,10 +50,12 @@ from ui_kit import (
 from ui_lang import LangMixin
 
 HERE = Path(__file__).resolve().parent
-CONFIG_PATH = HERE / "cache_config.json"
-THUMB_DIR = HERE / "cache_thumbs"
-INDEX_PATH = HERE / "cache_index.json"
-VIDEO_TMP_DIR = HERE / "tmp_video"   # 视频抽帧的临时目录（用完即删）
+# 运行时产物统一落在「数据目录」（便携=程序旁 data/，否则用户目录；见 app_paths）
+DATA_DIR = app_paths.data_dir()
+CONFIG_PATH = DATA_DIR / "cache_config.json"
+THUMB_DIR = DATA_DIR / "cache_thumbs"
+INDEX_PATH = DATA_DIR / "cache_index.json"
+VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 THUMB = cs.THUMB
 
 
@@ -1938,7 +1941,7 @@ class CacheApp(LangMixin):
 
 def main() -> None:
     """入口：建窗口并进入 Tk 主循环。"""
-    ui_kit.enable_file_log(HERE / "logs" / "cache_picker.log")
+    ui_kit.enable_file_log(app_paths.data_dir() / "logs" / "cache_picker.log")
     root = tk.Tk()
     CacheApp(root)
     root.mainloop()
