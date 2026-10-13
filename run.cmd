@@ -1,5 +1,8 @@
 @echo off
-rem TG media picker - online picker (sign-in required on first run).
+rem TG media picker - unified launcher.
+rem
+rem Shows a mode-selection screen first, then enters either API mode (online
+rem picker, sign-in required) or local cache mode (read the tdata cache).
 rem
 rem ASCII-only on purpose: cmd.exe parses .cmd files using the console code page
 rem (GBK on Chinese Windows), so non-ASCII text here gets mis-decoded and can
@@ -14,7 +17,7 @@ setlocal
 cd /d "%~dp0"
 
 set "PYW=%~dp0.venv\Scripts\pythonw.exe"
-set "APP=%~dp0tg_picker.py"
+set "APP=%~dp0launcher.py"
 
 if not exist "%PYW%" (
     echo [ERROR] Virtual environment not found: .venv

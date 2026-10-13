@@ -10,10 +10,13 @@ This tool offers **two** ways to get the content out. Both share the same workfl
 **browse a wall of thumbnails → pick what you want → save only the selected items**,
 so you never have to export an entire chat.
 
-| Method | How it works | Data source | Credentials | Launch |
-|---|---|---|---|---|
-| **① Cache picker** | Decrypts media already cached on this machine | Telegram `tdata` cache | **Not required** | `run_cache.cmd` |
-| **② Online picker** | Downloads directly through your account API | Telegram servers | `api_id` / `api_hash` | `run.cmd` |
+| Mode | How it works | Data source | Credentials |
+|---|---|---|---|
+| **① Local cache mode** | Decrypts media already cached on this machine | Telegram `tdata` cache | **Not required** |
+| **② API mode** | Downloads directly through your account API | Telegram servers | `api_id` / `api_hash` |
+
+> Both modes share one launcher: double-click `run.cmd`, pick a mode on the
+> **mode-selection screen**, then enter that mode's flow.
 
 > ### Why do these work?
 > Telegram's protocol treats the two operations separately: the server **hard-refuses
@@ -39,12 +42,12 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-Then double-click whichever you need:
+Then double-click **`run.cmd`** and pick a mode on the selection screen:
 
-| I want to… | Double-click | Notes |
+| I want to… | Pick mode | Notes |
 |---|---|---|
-| Pick images I have **already viewed** in Telegram | `run_cache.cmd` | Auto-detects `tdata` on first run, or pick it manually; **no login of any kind** |
-| Pick content that was **never cached** (older messages, etc.) | `run.cmd` | Requires `api_id` / `api_hash` first (see section 3) |
+| Pick images I have **already viewed** in Telegram | **Local cache mode** | Auto-detects `tdata` on first run, or pick it manually; **no login of any kind** |
+| Pick content that was **never cached** (older messages, etc.) | **API mode** | Requires `api_id` / `api_hash` first (see section 3) |
 
 > **Requirements**: Python 3.11+ (tested on 3.13); a desktop environment with Tk
 > (bundled with the official Windows installer).
@@ -65,8 +68,10 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-> If you only use the cache picker (method ①), you can drop `telethon` — just delete
-> that line from `requirements.txt` and save about 13 MB.
+> If you only use local cache mode (method ①), you can drop `telethon` — just delete
+> that line from `requirements.txt` and save about 13 MB. The unified launcher imports
+> **lazily**: local cache mode never pulls in `telethon`, and API mode never pulls in
+> the tdata decryption chain.
 
 ## 1b. Where the decryption core comes from, and its boundaries
 
@@ -86,7 +91,7 @@ Load order (see `cache_source.find_decryptor_src()`):
 
 ---
 
-## 2. Cache picker (recommended, `run_cache.cmd`)
+## 2. Local cache mode (recommended)
 
 Reads **Telegram Desktop's cache directly**. Open it and you immediately see the photos
 and videos you have viewed in Telegram; only the ones you pick are saved — no need to
@@ -94,7 +99,7 @@ bulk-export with another tool first.
 
 ### Usage
 
-1. Double-click **`run_cache.cmd`**
+1. Double-click **`run.cmd`** and click **"Local cache mode"** on the selection screen
 2. Confirm the `tdata folder` (the official install location and common portable
    locations are probed automatically; you can also click **Browse**); if you set a
    Telegram **passcode**, enter it
@@ -131,7 +136,7 @@ bulk-export with another tool first.
 
 ---
 
-## 3. Online picker (method ②, `run.cmd`, credentials required)
+## 3. API mode (credentials required)
 
 Browses thumbnails for a **group/channel** over the Telegram API and downloads your
 picks. Useful for content that is **not in the cache** (very old messages, media you
@@ -151,8 +156,8 @@ never scrolled past in the client).
 
 ### Usage
 
-1. Double-click `run.cmd`, enter api_id / api_hash / phone (`+8613800000000` format) →
-   **Sign in / Connect**
+1. Double-click `run.cmd` and click **"API mode"** on the selection screen; enter
+   api_id / api_hash / phone (`+8613800000000` format) → **Sign in / Connect**
 2. Enter the code from the Telegram app in the **Code / password** row (two-step
    verification asks for the password as well)
 3. Enter the group/channel (`@username`, a `t.me` link, an invite link, or a numeric ID)
@@ -176,14 +181,15 @@ never scrolled past in the client).
 | File | Purpose |
 |---|---|
 | `cache_source.py` | Cache decryption and reading (TDEF, index, thumbnail cache, frame extraction) |
-| `cache_picker.py` | **Cache picker** GUI (method ①) |
-| `tg_picker.py` | Online picker GUI (method ②, Telethon) |
+| `launcher.py` | **Unified launcher**: shows the mode-selection screen, then enters the chosen mode |
+| `cache_picker.py` | **Local cache mode** GUI (method ①) |
+| `tg_picker.py` | **API mode** GUI (method ②, Telethon) |
 | `i18n.py` | Internationalization core: loads language resources, `t(key)` lookups, switches language and notifies the UI to refresh |
 | `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O) and shared constants |
-| `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by both GUIs |
+| `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by all three screens |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
-| `run_cache.cmd` / `run.cmd` | The two launchers |
+| `run.cmd` | Launcher script (calls `launcher.py`) |
 | `requirements.txt` / `requirements-dev.txt` | Runtime / development dependencies (pytest, ruff) |
 | `pyproject.toml` | Project metadata plus ruff and pytest configuration (dependencies live only in the .txt files) |
 | `tests/` | pytest test suite (see section 8) |
@@ -316,8 +322,8 @@ canvas text) to confirm no Chinese characters remain.
 - Legacy sort values stored as Chinese text in `cache_config.json` (e.g.
   `"日期 新→旧"`) are migrated to internal keys (`date_desc`) automatically on read, so
   no manual config editing is required.
-- `run.cmd` / `run_cache.cmd` print their missing-virtualenv notice in both Chinese and
-  English.
+- `run.cmd` prints its missing-virtualenv notice in plain ASCII (English) — `.cmd`
+  files are parsed using the system code page, so non-ASCII there causes trouble.
 
 ---
 
@@ -327,8 +333,9 @@ canvas text) to confirm no Chinese characters remain.
 
 ```
 tg-picker/
-├─ run.cmd / run_cache.cmd        launchers (call the entry points below by relative path)
-├─ cache_picker.py / tg_picker.py the two entry points (GUI)
+├─ run.cmd                        launcher (calls the entry point below by relative path)
+├─ launcher.py                    unified launcher: mode selection → chosen mode
+├─ cache_picker.py / tg_picker.py the two modes (GUI)
 ├─ cache_source.py                cache decryption and indexing (must stay next to _vendor/)
 ├─ i18n.py                        translation core
 ├─ ui_kit.py / ui_lang.py         shared helpers and the language-switching UI mechanism
@@ -340,8 +347,8 @@ tg-picker/
 
 > The project deliberately keeps a **flat layout** (entry scripts + modules) with no
 > `src/` package: `cache_source.py` locates the decryption core via a sibling
-> `_vendor/`, `i18n.py` locates resources via `HERE/locales`, and both `.cmd` launchers
-> invoke the entry points via `%~dp0`. Moving modules into a package would break all
+> `_vendor/`, `i18n.py` locates resources via `HERE/locales`, and the `.cmd` launcher
+> invokes the entry point via `%~dp0`. Moving modules into a package would break all
 > three at once.
 
 ### Installing dependencies
@@ -367,8 +374,9 @@ python -m venv .venv
 | `tests/test_cache_source.py` | decryptor discovery, LocalKey derivation, enumerate/decrypt/sniff/thumbnail, index round-trip and invalidation, tdata read-only | real tdata |
 | `tests/test_cache_picker_logic.py` | loading the cache, saving (including no-overwrite on name clash), date subfolders, single-item export, cache cleaning (artifacts only), index reuse rate | real tdata |
 | `tests/test_ui_kit.py` | path helpers: numeric suffix on name clashes, never overwrite an existing file | none |
-| `tests/test_gui_online.py` | online picker GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
-| `tests/test_gui_cache.py` | cache picker GUI: virtualized rendering, scroll performance, selection actions, language switch | real tdata + display |
+| `tests/test_gui_online.py` | API mode GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
+| `tests/test_gui_cache.py` | local cache mode GUI: virtualized rendering, scroll performance, selection actions, language switch | real tdata + display |
+| `tests/test_gui_launcher.py` | unified launcher: mode-selection build, language switch, entering the chosen mode | display (no network) |
 
 - When no tdata is found those tests are **skipped** (not failed); point at one with the
   `TDATA_PATH` environment variable, e.g. `set TDATA_PATH=D:\Telegram\tdata`.

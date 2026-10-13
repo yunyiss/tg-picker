@@ -1,8 +1,17 @@
 {
   "app.cache_title": "Telegram Cache Picker",
   "app.online_title": "TG Media Picker",
+  "app.launcher_title": "TG Media Picker",
 
   "lang.label": "Language",
+
+  "launch.heading": "Choose a mode",
+  "launch.mode.api_title": "API mode",
+  "launch.mode.api_desc": "Sign in with your Telegram account, browse a group/channel online and download media (requires api_id / api_hash from my.telegram.org).",
+  "launch.mode.cache_title": "Local cache mode",
+  "launch.mode.cache_desc": "Read images/videos cached by Telegram Desktop on this machine; no sign-in, pick and save directly.",
+  "launch.mode.enter": "Click to enter →",
+  "launch.hint": "Both modes only handle content you are allowed to access",
 
   "common.browse": "Browse…",
   "common.select_all": "Select all",

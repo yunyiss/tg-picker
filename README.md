@@ -8,10 +8,12 @@ Telegram 的群组/频道可以开启 **「禁止保存」**（Restrict Saving C
 本工具提供**两种**把内容存下来的方法，共同点是：
 **缩略图墙浏览 → 点选想要的 → 只保存选中的**，不必整群全量导出。
 
-| 方法 | 原理 | 数据来源 | 需要凭据 | 启动 |
-|---|---|---|---|---|
-| **① 缓存挑选器** | 解密本机已缓存的媒体 | Telegram `tdata` 缓存 | **不需要** | `run_cache.cmd` |
-| **② 在线挑选器** | 用账号 API 直接下载 | Telegram 服务器 | 需要 api_id / api_hash | `run.cmd` |
+| 模式 | 原理 | 数据来源 | 需要凭据 |
+|---|---|---|---|
+| **① 本地缓存模式** | 解密本机已缓存的媒体 | Telegram `tdata` 缓存 | **不需要** |
+| **② API 模式** | 用账号 API 直接下载 | Telegram 服务器 | 需要 api_id / api_hash |
+
+> 两种模式共用一个启动入口：双击 `run.cmd`，先在**模式选择界面**选一个，再进入对应流程。
 
 > ### 为什么这两种能work？
 > Telegram 官方协议对"禁止保存"的处理是**分离**的：服务器**硬拒绝转发**
@@ -34,12 +36,12 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-然后按需要双击：
+然后双击 **`run.cmd`** 启动，在模式选择界面选一个：
 
-| 我想…… | 双击 | 说明 |
+| 我想…… | 选择模式 | 说明 |
 |---|---|---|
-| 挑选我**已经在 Telegram 里看过**的图 | `run_cache.cmd` | 首次自动探测 `tdata`，也可手动选；**无需登录任何东西** |
-| 挑**没缓存过**的内容（历史消息等） | `run.cmd` | 需先申请 api_id / api_hash（见第三节） |
+| 挑选我**已经在 Telegram 里看过**的图 | **本地缓存模式** | 首次自动探测 `tdata`，也可手动选；**无需登录任何东西** |
+| 挑**没缓存过**的内容（历史消息等） | **API 模式** | 需先申请 api_id / api_hash（见第三节） |
 
 > **要求**：Python 3.11+（实测于 3.13）；桌面环境需有 Tk（Windows 官方安装包自带）。
 
@@ -59,8 +61,9 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt
 ```
 
-> 只用缓存挑选器（方法①）的话，可以不要 `telethon`——把 `requirements.txt`
-> 里那一行删掉即可，省约 13 MB。
+> 只用本地缓存模式（方法①）的话，可以不要 `telethon`——把 `requirements.txt`
+> 里那一行删掉即可，省约 13 MB。统一入口**按需延迟加载**：选本地缓存模式时
+> 不会拉起 `telethon`，选 API 模式时不会拉起 tdata 解密链。
 
 ## 一·补、解密内核的来源与边界
 
@@ -77,14 +80,14 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ---
 
-## 二、缓存挑选器（推荐，`run_cache.cmd`）
+## 二、本地缓存模式（推荐）
 
 **直接读取 Telegram Desktop 的缓存**，打开就能看到你在 Telegram 里看过的图片/视频，
 挑中哪个才保存哪个——不需要先用别的工具批量导出。
 
 ### 使用
 
-1. 双击 **`run_cache.cmd`**
+1. 双击 **`run.cmd`**，在模式选择界面点 **「本地缓存模式」**
 2. 确认 `tdata 目录`（会自动探测官方安装位置与便携版常见位置，也可点「浏览」手动选择）；
    若设过 Telegram 的**锁定密码**则填上
 3. 点 **「读取缓存」**——首次约 15 秒（生成缩略图），之后启动约 0.6 秒
@@ -113,7 +116,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ---
 
-## 三、在线挑选器（方法②，`run.cmd`，需要凭据）
+## 三、API 模式（需要凭据）
 
 通过 Telegram API 按**群/频道**在线浏览缩略图并挑选下载。
 适合**缓存里没有**的内容（例如很久以前的消息、你没在客户端里翻到过的媒体）。
@@ -129,7 +132,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 
 ### 使用
 
-1. 双击 `run.cmd`，填 api_id / api_hash / 手机号（`+8613800000000` 格式）→「登录 / 连接」
+1. 双击 `run.cmd`，在模式选择界面点 **「API 模式」**；填 api_id / api_hash / 手机号（`+8613800000000` 格式）→「登录 / 连接」
 2. 在 Telegram App 里收验证码，填到弹出的「验证码/密码」行（两步验证会再问一次密码）
 3. 填群/频道（`@用户名`、`t.me` 链接、邀请链接、数字 ID）→「加载媒体」
 4. 单击选中 / **双击 = 立刻下载这一张**（下载路径见下方日志）→「下载选中」
@@ -147,14 +150,15 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | 文件 | 作用 |
 |---|---|
 | `cache_source.py` | 缓存解密与读取（TDEF、索引、缩略图缓存、抽帧） |
-| `cache_picker.py` | **缓存挑选器** GUI（方法①） |
-| `tg_picker.py` | 在线挑选器 GUI（方法②，Telethon） |
+| `launcher.py` | **统一启动入口**：先展示模式选择界面，再进入对应模式 |
+| `cache_picker.py` | **本地缓存模式** GUI（方法①） |
+| `tg_picker.py` | **API 模式** GUI（方法②，Telethon） |
 | `i18n.py` | 国际化内核：载入语言资源、`t(key)` 取词、切换语言并通知界面刷新 |
 | `ui_kit.py` | 与界面无关的通用工具（`human_size` / `unique_path` / 配置读写）与共享常量 |
-| `ui_lang.py` | 语言切换的界面机制（`LangMixin`），两个 GUI 共用 |
+| `ui_lang.py` | 语言切换的界面机制（`LangMixin`），三个界面共用 |
 | `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
-| `run_cache.cmd` / `run.cmd` | 两个启动脚本 |
+| `run.cmd` | 启动脚本（调用 `launcher.py`） |
 | `requirements.txt` / `requirements-dev.txt` | 运行依赖 / 开发测试依赖（pytest、ruff） |
 | `pyproject.toml` | 项目元数据与 ruff、pytest 配置（依赖只在上面的 txt 里声明） |
 | `tests/` | pytest 测试套件（详见「八、开发与测试」） |
@@ -274,7 +278,8 @@ self.b_save.configure(text=t("cache.bottom.save_n", n=3))   # → 保存选中�
   `tg_`、扩展名、按日期分目录的 `YYYY-MM-DD` 格式等，保证既有配置与测试都兼容。
 - 旧版 `cache_config.json` 里以中文文本保存的排序项（如 `"日期 新→旧"`）会在读取时
   自动迁移成内部键（`date_desc`），无需手工改配置。
-- `run.cmd` / `run_cache.cmd` 在虚拟环境缺失时的提示为中英同行显示。
+- `run.cmd` 在虚拟环境缺失时的提示为纯 ASCII（英文）——`.cmd` 按系统代码页解析，
+  用非 ASCII 会踩坑。
 
 ---
 
@@ -284,8 +289,9 @@ self.b_save.configure(text=t("cache.bottom.save_n", n=3))   # → 保存选中�
 
 ```
 tg-picker/
-├─ run.cmd / run_cache.cmd        启动脚本（相对路径调用下面的入口）
-├─ cache_picker.py / tg_picker.py 两个入口（GUI）
+├─ run.cmd                        启动脚本（相对路径调用下面的入口）
+├─ launcher.py                    统一启动入口：模式选择 → 对应模式
+├─ cache_picker.py / tg_picker.py 两个模式（GUI）
 ├─ cache_source.py                缓存解密与索引（必须与 _vendor/ 同级）
 ├─ i18n.py                        翻译内核
 ├─ ui_kit.py / ui_lang.py         共享工具与语言切换界面机制
@@ -297,7 +303,7 @@ tg-picker/
 
 > 说明：本项目**刻意保持扁平布局**（入口脚本 + 模块），没有 `src/` 包。
 > 原因是 `cache_source.py` 靠同级 `_vendor/` 定位解密内核、`i18n.py` 靠
-> `HERE/locales` 定位资源、两个 `.cmd` 靠 `%~dp0` 调用入口——搬进包会同时破坏这几处。
+> `HERE/locales` 定位资源、`.cmd` 靠 `%~dp0` 调用入口——搬进包会同时破坏这几处。
 
 ### 安装依赖
 
@@ -322,8 +328,9 @@ python -m venv .venv
 | `tests/test_cache_source.py` | 定位解密内核、派生 LocalKey、枚举/解密/嗅探/缩略图、索引读写与失效、tdata 只读 | 需真实 tdata |
 | `tests/test_cache_picker_logic.py` | 读取缓存、保存（含重名不覆盖）、按日期分目录、单条导出、清理缓存（只删缓存产物）、索引复用率 | 需真实 tdata |
 | `tests/test_ui_kit.py` | 路径工具：重名加序号、绝不覆盖已有文件 | 无 |
-| `tests/test_gui_online.py` | 在线挑选器 GUI：建窗、队列分支、单元格选中、语言切换、验证码回填 | 需显示器（不联网） |
-| `tests/test_gui_cache.py` | 缓存挑选器 GUI：虚拟化渲染、滚动性能、选择操作、语言切换 | 需真实 tdata + 显示器 |
+| `tests/test_gui_online.py` | API 模式 GUI：建窗、队列分支、单元格选中、语言切换、验证码回填 | 需显示器（不联网） |
+| `tests/test_gui_cache.py` | 本地缓存模式 GUI：虚拟化渲染、滚动性能、选择操作、语言切换 | 需真实 tdata + 显示器 |
+| `tests/test_gui_launcher.py` | 统一入口：模式选择界面构建、语言切换、选后进入对应模式 | 需显示器（不联网） |
 
 - 找不到 tdata 时相关用例会**跳过**（`skip`，不算失败）；可用环境变量
   `TDATA_PATH` 指定：`set TDATA_PATH=D:\Telegram\tdata`。

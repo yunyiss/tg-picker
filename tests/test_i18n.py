@@ -14,7 +14,7 @@ import pytest
 import i18n
 
 HERE = Path(__file__).resolve().parent.parent
-SOURCES = ["cache_picker.py", "tg_picker.py", "cache_source.py",
+SOURCES = ["launcher.py", "cache_picker.py", "tg_picker.py", "cache_source.py",
            "ui_kit.py", "ui_lang.py"]
 # 键名形如 ns.sub.sub：小写字母开头、点分
 KEY_RE = re.compile(r"^[a-z][a-z0-9_]*(?:\.[a-z0-9_]+)+$")
