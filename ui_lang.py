@@ -125,11 +125,6 @@ class LangMixin:
         self._status_fn = (lambda k=key, a=dict(kw): t(k, **a))
         self.l_status.configure(text=self._status_fn())
 
-    def set_status_raw(self, text: str) -> None:
-        """状态栏显示即席文本（不参与语言重放，用于外部已生成的进度文案）。"""
-        self._status_fn = None
-        self.l_status.configure(text=text)
-
     def _render_status(self) -> None:
         """按当前语言重放状态栏；无重放内容且空闲时回到空闲文案。"""
         if self._status_fn is not None:

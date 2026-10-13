@@ -503,6 +503,9 @@ def prepare(
     线程池（Pillow/Crypto 会释放 GIL，因此能并行）；结果按**原顺序**汇总，
     ``workers=1`` 与旧版逐项串行的输出完全一致。
 
+    ``progress_cb`` 每处理一项回调一次 ``progress_cb(done, total)``——**只给数字**，
+    面向用户的进度文案由调用方（界面）按当前语言渲染，本层不拼装文案。
+
     返回 (有效条目, 统计)。
     """
     reader = get_reader(tdata, passcode)
@@ -580,7 +583,7 @@ def prepare(
                     stats["ok"] += 1
             done += 1
             if progress_cb is not None:
-                progress_cb(done, total, t("cs.progress_parse", i=done, total=total))
+                progress_cb(done, total)
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
 

@@ -992,7 +992,7 @@ class CacheApp(LangMixin):
             try:
                 entries, stats = load_cache(
                     tdata, passcode,
-                    progress_cb=lambda i, tot, txt: self.ui_q.put(("load_progress", i, tot, txt)),
+                    progress_cb=lambda i, tot: self.ui_q.put(("load_progress", i, tot)),
                     cancel_event=self.cancel,
                     exts=exts,
                     workers=workers,
@@ -1847,11 +1847,10 @@ class CacheApp(LangMixin):
             handler(msg)
 
     def _msg_load_progress(self, msg: tuple) -> None:
-        """索引进度：更新进度条与状态栏。"""
-        _, i, total, txt = msg
+        """索引进度：更新进度条与状态栏（文案按当前语言渲染，随语言切换重放）。"""
+        _, i, total = msg
         self._show_progress((i / total * 100) if total else 0)
-        # 进度文案由 cache_source 生成，每个文件都会刷新，故不走"重放"
-        self.set_status_raw(txt)
+        self.set_status("cs.progress_parse", i=i, total=total)
 
     def _msg_load_done(self, msg: tuple) -> None:
         """缓存读取完成：装载条目、刷新视图与计数、记住 tdata 路径。"""
@@ -1916,7 +1915,7 @@ class CacheApp(LangMixin):
     def set_status_error(self, key: str, detail: str) -> None:
         """错误状态：标题也是语言键，切换语言时一并重算。
 
-        ``set_status`` / ``set_status_raw`` / ``_render_status`` 由 LangMixin 提供。
+        ``set_status`` / ``_render_status`` 由 LangMixin 提供。
         """
         self._status_fn = (lambda k=key, d=detail: t("cache.status.err", title=t(k), detail=d))
         self.l_status.configure(text=self._status_fn())

@@ -1,5 +1,24 @@
 # 变更记录
 
+## 2026-10-13（重构：领域层不再拼装界面文案）
+
+### 背景
+`cache_source.prepare()` 的进度回调把**已格式化好的**文案一并传给界面
+（`progress_cb(done, total, t("cs.progress_parse", ...))`），领域层因此依赖
+i18n；而且这条进度在后续切换语言时无法重渲染（界面只能原样显示）。
+
+### 修改
+- `prepare()` 的 `progress_cb` 改为**只回调数字** `progress_cb(done, total)`；
+  面向用户的进度文案由界面按当前语言渲染。
+- `cache_picker` 进度消息改为只带 `(i, total)`，状态栏走
+  `set_status("cs.progress_parse", ...)`——**纳入可重放**，切换语言即时刷新。
+- `ui_lang.LangMixin.set_status_raw()` 随之失去唯一调用方，一并删除（避免死代码）。
+
+### 验证
+- 新增用例 `test_prepare_progress_callback_passes_counts_only`：断言进度回调
+  只会以 `(done, total)` 两个参数触发。
+- `ruff` 全绿；`pytest` 通过（含 GUI：进度状态栏按语言键渲染）。
+
 ## 2026-10-13（工程化：新增 GitHub Actions CI）
 
 ### 修改

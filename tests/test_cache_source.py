@@ -138,3 +138,22 @@ def test_get_reader_reuses_same_instance(tdata_dir: Path, monkeypatch):
     r2 = cs.get_reader(tdata_dir, "")
     assert r1 is r2, "同一 (tdata, passcode) 应复用同一个 reader"
     assert len(calls) == 1, f"LocalKey 应只派生一次，实际 {len(calls)} 次：{calls}"
+
+
+def test_prepare_progress_callback_passes_counts_only(tdata_dir: Path, tmp_path: Path):
+    """回归（P1-6）：领域层只回传进度数字，不拼装面向用户的文案。
+
+    ``prepare`` 的 progress_cb 应始终以 ``(done, total)`` 两个参数回调；旧行为
+    多传一个已格式化好的文案，界面便无法随语言切换重渲染这条进度。
+    """
+    seen: list[tuple] = []
+    cs.prepare(
+        tdata_dir, "",
+        index_path=tmp_path / "prog_idx.json",
+        thumb_dir=tmp_path / "prog_thumbs",
+        progress_cb=lambda *a: seen.append(a),
+    )
+    assert seen, "prepare 未回调进度"
+    assert all(len(a) == 2 for a in seen), (
+        f"进度回调应只传 (done, total)，实际参数个数：{sorted({len(a) for a in seen})}"
+    )
