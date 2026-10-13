@@ -170,11 +170,12 @@ class MediaItem:
 # 读取与保存（纯函数，便于自检）
 # ---------------------------------------------------------------------------
 def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None,
-               exts: tuple[str, ...] | None = None):
+               exts: tuple[str, ...] | None = None, workers: int = 1):
     """读取并解析缓存，返回 (条目, 统计)。
 
     ``exts`` 为可选的输出格式过滤（扩展名集合，None=不过滤），只在嗅探命中后
-    按格式早停，见 :func:`cache_source.prepare`。
+    按格式早停；``workers`` 为读盘/解密的并发线程数（来自界面「性能档位」）。
+    两者均见 :func:`cache_source.prepare`。
     """
     return cs.prepare(
         tdata=tdata,
@@ -184,6 +185,7 @@ def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None,
         progress_cb=progress_cb,
         cancel_event=cancel_event,
         exts=exts,
+        workers=workers,
     )
 
 
@@ -971,6 +973,7 @@ class CacheApp(LangMixin):
         self._apply_gear()           # 档位若在忙碌时改过，这里生效
         passcode = self.e_pass.get()
         exts = None if len(selected) == len(FORMATS) else selected   # 全勾=不过滤
+        workers = self._gear_workers(self.v_gear.get())   # 性能档位真正作用于扫描
         t0 = time.time()
 
         def work():
@@ -980,6 +983,7 @@ class CacheApp(LangMixin):
                     progress_cb=lambda i, tot, txt: self.ui_q.put(("load_progress", i, tot, txt)),
                     cancel_event=self.cancel,
                     exts=exts,
+                    workers=workers,
                 )
                 self.ui_q.put(("load_done", tdata, entries, stats, passcode, time.time() - t0))
             except cs.PasscodeRequired as exc:

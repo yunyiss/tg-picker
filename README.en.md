@@ -112,11 +112,13 @@ bulk-export with another tool first.
    **Clear cache** to reclaim that disk space.
    The **Export** dropdown (All / Images / Videos) sets what is previewed and exported.
    The **Performance** gear (Conservative 1 thread / Balanced recommended / Turbo all
-   cores) sets the background thumbnail worker count and is auto-matched to this machine's
-   hardware on launch (low-spec devices are clamped so it never over-threads)
+   cores) sets the **concurrency for both the scan and the thumbnails** and is auto-matched
+   to this machine's hardware on launch (low-spec devices are clamped so it never
+   over-threads); a cold scan measured 12.6s → 4.8s
 4. Click **Start scan** — nothing is scanned automatically on launch (so it never
-   decrypts everything on startup); about 15 seconds the first time (thumbnails are
-   generated), then roughly 0.6 seconds on later launches (incremental index reuse)
+   decrypts everything on startup); about 5–13 seconds the first time (thumbnails are
+   generated, depending on the gear and machine), then roughly 0.6–1.2 seconds on later
+   launches (incremental index reuse)
 5. Pick from the thumbnail wall:
    - **Click** to select (turns blue with a check); click again to deselect
    - **Shift + click** to select a range

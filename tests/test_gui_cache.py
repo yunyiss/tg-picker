@@ -252,6 +252,31 @@ def test_output_formats_default_all_and_gear_clamped(tk_root):
 
 
 @pytest.mark.gui
+def test_scan_uses_gear_workers(tk_root, tmp_path, monkeypatch):
+    """「性能档位」应真正作用于**扫描**：传给 load_cache 的 workers 与档位一致。"""
+    seen: dict = {}
+
+    def fake_load(tdata, passcode, **kw):
+        seen.update(kw)
+        return [], {"total": 0, "ok": 0, "reused": 0, "skipped": 0, "failed": 0}
+
+    monkeypatch.setattr(cp, "load_cache", fake_load)
+    app = cp.CacheApp(tk_root)
+    app.e_tdata.delete(0, "end")
+    app.e_tdata.insert(0, str(tmp_path))
+    app.v_gear.set("conservative")
+    app.cb_gear.set(app._gear_label("conservative"))
+    app.on_load()
+
+    deadline = time.time() + 10
+    while "workers" not in seen and time.time() < deadline:
+        app.root.update()
+        time.sleep(0.02)
+    assert seen.get("workers") == 1, f"保守档应传 1 个扫描线程，实际 {seen}"
+    app._on_close()
+
+
+@pytest.mark.gui
 def test_select_all_box_is_tristate_in_sync(tk_root):
     """「全选」三态联动：默认全选 → 取消一个变半选 → 全取消变未选 → 点选一键全勾。"""
     app = cp.CacheApp(tk_root)

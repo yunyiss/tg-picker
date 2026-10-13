@@ -16,6 +16,7 @@ tdata 密钥派生与 TDEF 解密代码——同一套逻辑已经从这套 tdat
 """
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import io
 import json
@@ -417,6 +418,47 @@ def entry_thumb_path(thumb_dir: Path, key: str) -> Path:
     return Path(thumb_dir) / key[:2] / f"{key}.jpg"
 
 
+def _process_one(ent: CacheEntry, reader: CacheReader, thumb_dir: Path,
+                 key: str, exts: tuple[str, ...] | None) -> dict:
+    """处理单个需要读盘的缓存文件：嗅探 → （图片）解密出缩略图。
+
+    只读写**属于自己的**数据（``ent`` 与自己的缩略图文件），不触碰任何共享状态；
+    结果由主线程按原顺序汇总，因此并发下输出与串行逐字节一致（确定性红线）。
+    可在工作线程中调用。
+    """
+    try:
+        head, plain_size = reader.read_head_and_size(ent.cache_path)
+    except Exception:
+        return {"status": "failed"}
+    hit = sniff(head)
+    if hit is None:
+        return {"status": "skipped"}
+    if exts is not None and hit[1] not in exts:
+        return {"status": "filtered"}
+    kind, ext = hit
+    if kind == "image":
+        # 图片体积小：完整解密，得到精确大小并出缩略图
+        try:
+            data = reader.decrypt(ent.cache_path)
+            size = len(data)
+            img = make_thumb(data, kind)
+        except Exception:
+            return {"status": "failed"}
+        tp = entry_thumb_path(thumb_dir, key)
+        try:
+            tp.parent.mkdir(parents=True, exist_ok=True)
+            if img is not None:
+                img.save(tp, "JPEG", quality=85)
+            elif tp.exists():
+                tp.unlink()
+        except OSError:
+            pass
+    else:
+        # 视频：不整体解密，长度由容器开销推算；缩略图用界面占位图
+        size = plain_size
+    return {"status": "ok", "kind": kind, "ext": ext, "size": size}
+
+
 def prepare(
     tdata: Path,
     passcode: str,
@@ -425,6 +467,7 @@ def prepare(
     progress_cb=None,
     cancel_event=None,
     exts: tuple[str, ...] | None = None,
+    workers: int = 1,
 ) -> tuple[list[CacheEntry], dict]:
     """遍历缓存：嗅探类型 → 需要时出缩略图 → 复用/更新索引。
 
@@ -434,6 +477,11 @@ def prepare(
     不出缩略图、不进本次结果），只计入 skipped——这样只想扫某几种格式时不会为
     其它格式付出解密与缩略图开销。旧索引里**仍然有效**（mtime 一致）的其它格式
     记录会原样保留，便于切回时直接复用（不因筛选而丢缓存、拖慢下次全扫）。
+
+    ``workers`` 为读盘/解密阶段的并发线程数（来自界面的「性能档位」）：
+    索引复用等零 IO 的条目仍在主线程直接判定，真正耗时的解密与缩略图生成交给
+    线程池（Pillow/Crypto 会释放 GIL，因此能并行）；结果按**原顺序**汇总，
+    ``workers=1`` 与旧版逐项串行的输出完全一致。
 
     返回 (有效条目, 统计)。
     """
@@ -445,89 +493,76 @@ def prepare(
     result: list[CacheEntry] = []
     stats = {"total": total, "ok": 0, "reused": 0, "skipped": 0, "failed": 0}
 
-    for i, ent in enumerate(entries, 1):
-        if cancel_event is not None and cancel_event.is_set():
-            break
-        if progress_cb is not None:
-            progress_cb(i, total, t("cs.progress_parse", i=i, total=total))
-
-        rec = old.get(ent.rel)
+    # ---- 1) 串行决策（零 IO 或仅一次 stat）：复用 / 过滤的直接定案 ----
+    keys: list[str] = []
+    reused: dict[int, dict] = {}      # 下标 -> 旧记录（直接复用）
+    carried: dict[int, dict] = {}     # 下标 -> 旧记录（未选格式：保留但不输出）
+    jobs: list[int] = []
+    for idx, ent in enumerate(entries):
         key = hashlib.md5(ent.rel.encode("utf-8", "replace")).hexdigest()
-        tp = entry_thumb_path(thumb_dir, key)
-
-        # 复用：索引有记录 + 文件未变 + （图片需缩略图仍在；视频无需缩略图）
+        keys.append(key)
+        rec = old.get(ent.rel)
         rec_kind = rec.get("kind") if rec else None
         rec_ext = rec.get("ext") if rec else None
         rec_fresh = bool(rec) and abs(float(rec.get("mtime", -1)) - ent.mtime) < 1e-6
-        # 输出格式过滤在**复用路径也要生效**：否则过滤会被"直接复用旧索引"绕过，
-        # 把上次扫描记录下来的其它格式一并返回。但记录**仍然有效**（mtime 一致），
-        # 故保留到新索引里——这样切回该格式或「全部」时可直接复用，无需重新解密
-        # （性能优先：不因筛选而丢弃其它格式已有的索引记录）。
+        # 复用路径上的格式过滤：记录仍有效，故保留到新索引，便于切回时复用
         if exts is not None and rec_fresh and rec_ext is not None and rec_ext not in exts:
-            new_index[ent.rel] = rec
-            stats["skipped"] += 1
+            carried[idx] = rec
             continue
-        thumb_ok = tp.exists() if rec_kind == "image" else True
+        # 复用：索引有记录 + 文件未变 + （图片需缩略图仍在；视频无需缩略图）
+        thumb_ok = rec_kind != "image" or entry_thumb_path(thumb_dir, key).exists()
         if rec_fresh and thumb_ok:
-            ent.kind = rec.get("kind", "")
-            ent.ext = rec.get("ext", "")
-            ent.size = int(rec.get("size", 0))
-            ent.thumb_key = key
-            new_index[ent.rel] = rec
-            result.append(ent)
-            stats["ok"] += 1
-            stats["reused"] += 1
+            reused[idx] = rec
             continue
+        jobs.append(idx)
 
-        # 快速嗅探：只解密前缀即可判断类型
-        try:
-            head, plain_size = reader.read_head_and_size(ent.cache_path)
-        except Exception:
-            stats["failed"] += 1
-            continue
-        hit = sniff(head)
-        if hit is None:
-            stats["skipped"] += 1
-            continue
-        if exts is not None and hit[1] not in exts:
-            # 输出格式过滤：与"未识别"同样早停，不读余量、不落盘；若旧索引里已有
-            # **仍然有效**（mtime 一致）的记录，则保留，便于下次复用、避免重解密。
-            if rec_fresh and rec is not None:
+    # ---- 2) 并行读盘/解密（保序汇总；workers=1 即等价串行）----
+    def work(idx: int) -> dict:
+        return _process_one(entries[idx], reader, thumb_dir, keys[idx], exts)
+
+    done = 0
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers))
+    try:
+        futures = {idx: pool.submit(work, idx) for idx in jobs}
+        for idx, ent in enumerate(entries):
+            if cancel_event is not None and cancel_event.is_set():
+                break
+            key = keys[idx]
+            if idx in reused:
+                rec = reused[idx]
+                ent.kind = rec.get("kind", "")
+                ent.ext = rec.get("ext", "")
+                ent.size = int(rec.get("size", 0))
+                ent.thumb_key = key
                 new_index[ent.rel] = rec
-            stats["skipped"] += 1
-            continue
-
-        kind, ext = hit
-        ent.kind, ent.ext = kind, ext
-
-        if kind == "image":
-            # 图片体积小：完整解密，得到精确大小并出缩略图
-            try:
-                data = reader.decrypt(ent.cache_path)
-                ent.size = len(data)
-                img = make_thumb(data, kind)
-            except Exception:
-                stats["failed"] += 1
-                continue
-            try:
-                tp.parent.mkdir(parents=True, exist_ok=True)
-                if img is not None:
-                    img.save(tp, "JPEG", quality=85)
-                elif tp.exists():
-                    tp.unlink()
-            except OSError:
-                pass
-        else:
-            # 视频：不整体解密，长度由容器开销推算；缩略图用界面占位图
-            ent.size = plain_size
-
-        ent.thumb_key = key
-        new_index[ent.rel] = {
-            "kind": kind, "ext": ext, "size": ent.size,
-            "mtime": ent.mtime, "label": ent.label,
-        }
-        result.append(ent)
-        stats["ok"] += 1
+                result.append(ent)
+                stats["ok"] += 1
+                stats["reused"] += 1
+            elif idx in carried:
+                new_index[ent.rel] = carried[idx]
+                stats["skipped"] += 1
+            else:
+                out = futures[idx].result()
+                status = out["status"]
+                if status == "failed":
+                    stats["failed"] += 1
+                elif status == "skipped" or status == "filtered":
+                    stats["skipped"] += 1
+                else:
+                    ent.kind, ent.ext = out["kind"], out["ext"]
+                    ent.size = out["size"]
+                    ent.thumb_key = key
+                    new_index[ent.rel] = {
+                        "kind": ent.kind, "ext": ent.ext, "size": ent.size,
+                        "mtime": ent.mtime, "label": ent.label,
+                    }
+                    result.append(ent)
+                    stats["ok"] += 1
+            done += 1
+            if progress_cb is not None:
+                progress_cb(done, total, t("cs.progress_parse", i=done, total=total))
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
 
     if cancel_event is not None and cancel_event.is_set():
         # 被取消：不写索引，避免把"扫到一半"的结果落盘（下次启动会重新解密）

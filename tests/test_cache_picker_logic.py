@@ -91,6 +91,27 @@ def test_filtered_scan_keeps_index_for_reuse(tdata_dir: Path, tmp_path: Path, mo
     assert stats_full["failed"] == 0
 
 
+def test_parallel_scan_matches_serial(tdata_dir: Path, tmp_path: Path, monkeypatch):
+    """并发扫描（workers=8）与串行（workers=1）的条目顺序与统计必须逐项一致。
+
+    回归测试（确定性红线）：扫描的读盘/解密改为并发后，输出不得因调度而漂移。
+    """
+    def run(workers: int, tag: str):
+        monkeypatch.setattr(cp, "INDEX_PATH", tmp_path / f"idx-{tag}.json")
+        monkeypatch.setattr(cp, "THUMB_DIR", tmp_path / f"thumbs-{tag}")
+        entries, stats = cp.load_cache(tdata_dir, "", workers=workers)
+        return entries, stats
+
+    e1, s1 = run(1, "serial")
+    e8, s8 = run(8, "parallel")
+
+    assert len(e1) == len(e8) > 0, (len(e1), len(e8))
+    assert [e.rel for e in e1] == [e.rel for e in e8], "并发下条目顺序应与串行一致"
+    assert [(e.kind, e.ext, e.size) for e in e1] == \
+        [(e.kind, e.ext, e.size) for e in e8], "并发下类型/大小应与串行一致"
+    assert s1 == s8, f"并发统计应与串行一致：{s1} vs {s8}"
+
+
 def test_thumbnails_are_cached_on_disk(tdata_dir: Path):
     """图片缩略图应落盘（重复启动才可能秒开）。"""
     entries, _ = cp.load_cache(tdata_dir, "")
