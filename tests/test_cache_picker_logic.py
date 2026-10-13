@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -60,6 +61,34 @@ def test_load_cache_excludes_webm(tdata_dir: Path):
     entries, _ = cp.load_cache(tdata_dir, "", exts=(".mp4", ".jpg", ".png"))
     items = [cp.MediaItem(entry=e) for e in entries]
     assert all(i.entry.ext != ".webm" for i in items), "未勾选 webm 却仍被扫出来"
+
+
+def test_filtered_scan_keeps_index_for_reuse(tdata_dir: Path, tmp_path: Path, monkeypatch):
+    """筛选扫描只输出所选格式，但**保留**其它格式仍有效的索引记录。
+
+    回归测试（性能）：曾经在筛选时丢弃其它格式的索引记录，导致切回「全部」时
+    整批重新解密（视频筛选后回全扫需重生成 2000+ 缩略图，≈ 冷扫描）。
+    """
+    idx = tmp_path / "idx.json"
+    thumbs = tmp_path / "thumbs"
+    monkeypatch.setattr(cp, "INDEX_PATH", idx)
+    monkeypatch.setattr(cp, "THUMB_DIR", thumbs)
+
+    cp.load_cache(tdata_dir, "")                       # 全量：写入完整索引
+    full_n = len(json.loads(idx.read_text(encoding="utf-8"))["entries"])
+    assert full_n > 0
+
+    entries, stats = cp.load_cache(tdata_dir, "", exts=(".jpg",))
+    assert all(cp.MediaItem(entry=e).entry.ext == ".jpg" for e in entries), \
+        "本次输出应只有所选格式"
+    kept_n = len(json.loads(idx.read_text(encoding="utf-8"))["entries"])
+    assert kept_n == full_n, "其它格式的索引记录应被保留（否则切回全部要重解密）"
+
+    # 切回「全部」：应当**全部复用**，不重新解密
+    _, stats_full = cp.load_cache(tdata_dir, "")
+    assert stats_full["reused"] == full_n, \
+        f"切回全部应完全复用索引，实际复用 {stats_full['reused']}/{full_n}"
+    assert stats_full["failed"] == 0
 
 
 def test_thumbnails_are_cached_on_disk(tdata_dir: Path):

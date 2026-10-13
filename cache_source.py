@@ -430,9 +430,10 @@ def prepare(
 
     ``exts`` 为可选的**输出格式过滤**（扩展名集合，含点，如 ``(".jpg", ".png")``；
     移植自上游 tg-scoop 的 allowed_types，但按**具体格式**而非大类）：
-    None 表示不过滤；给定集合时，嗅探命中但不在集合内的格式**早停**
-    （不解密、不出缩略图、不落索引），只计入 skipped——这样只想扫某几种格式时
-    不会为其它格式付出解密与缩略图开销。
+    None 表示不过滤；给定集合时，嗅探命中但不在集合内的格式**早停**（不解密、
+    不出缩略图、不进本次结果），只计入 skipped——这样只想扫某几种格式时不会为
+    其它格式付出解密与缩略图开销。旧索引里**仍然有效**（mtime 一致）的其它格式
+    记录会原样保留，便于切回时直接复用（不因筛选而丢缓存、拖慢下次全扫）。
 
     返回 (有效条目, 统计)。
     """
@@ -459,8 +460,11 @@ def prepare(
         rec_ext = rec.get("ext") if rec else None
         rec_fresh = bool(rec) and abs(float(rec.get("mtime", -1)) - ent.mtime) < 1e-6
         # 输出格式过滤在**复用路径也要生效**：否则过滤会被"直接复用旧索引"绕过，
-        # 把上次扫描记录下来的其它格式一并返回。
+        # 把上次扫描记录下来的其它格式一并返回。但记录**仍然有效**（mtime 一致），
+        # 故保留到新索引里——这样切回该格式或「全部」时可直接复用，无需重新解密
+        # （性能优先：不因筛选而丢弃其它格式已有的索引记录）。
         if exts is not None and rec_fresh and rec_ext is not None and rec_ext not in exts:
+            new_index[ent.rel] = rec
             stats["skipped"] += 1
             continue
         thumb_ok = tp.exists() if rec_kind == "image" else True
@@ -486,7 +490,10 @@ def prepare(
             stats["skipped"] += 1
             continue
         if exts is not None and hit[1] not in exts:
-            # 输出格式过滤：与"未识别"同样早停，不读余量、不落盘
+            # 输出格式过滤：与"未识别"同样早停，不读余量、不落盘；若旧索引里已有
+            # **仍然有效**（mtime 一致）的记录，则保留，便于下次复用、避免重解密。
+            if rec_fresh and rec is not None:
+                new_index[ent.rel] = rec
             stats["skipped"] += 1
             continue
 

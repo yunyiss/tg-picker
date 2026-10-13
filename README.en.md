@@ -104,12 +104,16 @@ bulk-export with another tool first.
    locations are probed automatically; you can also click **Browse**); if you set a
    Telegram **passcode**, enter it
 3. **Output types** — all 9 formats are checked by default (mp4 / webm / avi / mkv / mov /
-   jpg / png / gif / webp); uncheck the ones you don't want, and unchecked formats are
-   **never scanned** (no decryption, no thumbnails). The **Export** dropdown
-   (All / Images / Videos) sets what is previewed and exported. The **Performance** gear
-   (Conservative 1 thread / Balanced recommended / Turbo all cores) sets the background
-   thumbnail worker count and is auto-matched to this machine's hardware on launch
-   (low-spec devices are clamped so it never over-threads)
+   jpg / png / gif / webp). The **Select all** box on the left toggles them all at once and
+   turns to the **partial** state when only some are checked; unchecked formats are
+   **never scanned** (no decryption, no thumbnails, not in this run's results) — scan jpg
+   only and only jpg comes out. Index records and thumbnails already known for other
+   formats are **kept**, so switching back to All never re-scans (still sub-second); click
+   **Clear cache** to reclaim that disk space.
+   The **Export** dropdown (All / Images / Videos) sets what is previewed and exported.
+   The **Performance** gear (Conservative 1 thread / Balanced recommended / Turbo all
+   cores) sets the background thumbnail worker count and is auto-matched to this machine's
+   hardware on launch (low-spec devices are clamped so it never over-threads)
 4. Click **Start scan** — nothing is scanned automatically on launch (so it never
    decrypts everything on startup); about 15 seconds the first time (thumbnails are
    generated), then roughly 0.6 seconds on later launches (incremental index reuse)

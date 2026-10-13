@@ -612,6 +612,19 @@ class CacheApp(LangMixin):
         r3.pack(fill="x", pady=(10, 0))
         self._T(ttk.Label(r3, style="Field.TLabel", width=14),
                 "cache.setup.formats_label").pack(side="left", anchor="n")
+        # 「全选」框：三态显示（全选 "1" / 半选 "" / 全不选 "0"），随各格式勾选实时同步。
+        # ttk::checkbutton 在 Tk 8.6 不支持三态，故这一个用经典 tk.Checkbutton
+        # （配色与相邻的 ttk 复选框对齐，视觉上保持一致）。
+        self.v_all = tk.StringVar(value="1")
+        self.cb_all = self._T(
+            tk.Checkbutton(r3, variable=self.v_all, onvalue="1", offvalue="0",
+                           tristatevalue="", command=self.on_toggle_all,
+                           bg=PANEL, fg=FG, activebackground=PANEL,
+                           activeforeground=FG, selectcolor=FIELD,
+                           font=(FONT, 9), highlightthickness=0, bd=0,
+                           relief="flat"),
+            "common.select_all")
+        self.cb_all.pack(side="left", anchor="n", padx=(0, 14))
         grid = ttk.Frame(r3, style="Panel.TFrame")
         grid.pack(side="left")
         self.v_formats: dict[str, tk.BooleanVar] = {}
@@ -621,6 +634,7 @@ class CacheApp(LangMixin):
                             style="TCheckbutton").grid(
                 row=i // 5, column=i % 5, sticky="w", padx=(0, 12), pady=1)
             self.v_formats[ext] = var
+            var.trace_add("write", self._sync_all_state)   # 单个变更 → 同步全选框
         self._divider()
 
     # ---------- 筛选栏（独立一档背景）----------
@@ -720,14 +734,39 @@ class CacheApp(LangMixin):
         self.on_filter_change()
 
     def on_kind_change(self) -> None:
-        """输出类型下拉：切换显示筛选（数据已读时即时生效）。
+        """导出内容下拉：切换预览显示与导出的范围（数据已扫过时即时生效）。
 
-        类型同时是「读取缓存」的提取范围——若想只提取某一类，先在此选好再点读取。
+        扫描范围由上方「输出类型」的格式勾选决定，与本下拉解耦。
         """
         idx = self.cb_kind.current()
         if 0 <= idx < len(KIND_VALUES):
             self.v_kind.set(KIND_VALUES[idx])
         self.on_filter_change()
+
+    # ---------- 输出类型（扫描格式）----------
+    def _sync_all_state(self, *_args) -> None:
+        """按各格式的勾选情况，把「全选」框同步为 全选 / 半选 / 全不选。
+
+        由每个格式的 BooleanVar 的 write 追踪调用，因此**实时生效**，无需重启任务。
+        """
+        values = [var.get() for var in self.v_formats.values()]
+        if all(values):
+            self.v_all.set("1")
+        elif any(values):
+            self.v_all.set("")       # 半选（部分勾选）
+        else:
+            self.v_all.set("0")
+
+    def on_toggle_all(self) -> None:
+        """点「全选」：一键勾选/取消勾选所有扫描类型。
+
+        意图按**各格式当前是否已全选**决定（不依赖控件点击后被 Tk 改写的变量值），
+        因此三态只是"显示"，点击始终是干脆的切换。
+        """
+        target = not all(var.get() for var in self.v_formats.values())
+        for var in self.v_formats.values():
+            var.set(target)
+        self._sync_all_state()
 
     # ---------- 底部操作条 ----------
     def _build_bottombar(self) -> None:

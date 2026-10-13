@@ -249,3 +249,29 @@ def test_output_formats_default_all_and_gear_clamped(tk_root):
     app.hw_rec = ui_kit.recommended_workers(app.hw)
     assert app._gear_workers("turbo") == app.hw_rec
     app._on_close()
+
+
+@pytest.mark.gui
+def test_select_all_box_is_tristate_in_sync(tk_root):
+    """「全选」三态联动：默认全选 → 取消一个变半选 → 全取消变未选 → 点选一键全勾。"""
+    app = cp.CacheApp(tk_root)
+    assert app.v_all.get() == "1", "默认应全选"
+
+    app.v_formats[".webm"].set(False)
+    assert app.v_all.get() == "", "取消一个后应为半选"
+    assert sum(1 for v in app.v_formats.values() if v.get()) == len(cp.FORMATS) - 1
+
+    for var in app.v_formats.values():
+        var.set(False)
+    assert app.v_all.get() == "0", "全部取消后应为未选"
+
+    app.v_all.set("1")        # 模拟点击：意图按各格式当前状态决定，与控件改写后的变量无关
+    app.on_toggle_all()
+    assert all(v.get() for v in app.v_formats.values()), "点全选应勾上所有格式"
+    assert app.v_all.get() == "1"
+
+    app.v_all.set("0")        # 再点一次：一键取消
+    app.on_toggle_all()
+    assert not any(v.get() for v in app.v_formats.values()), "再点应取消所有格式"
+    assert app.v_all.get() == "0"
+    app._on_close()
