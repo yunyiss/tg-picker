@@ -1,9 +1,28 @@
 """ui_kit 的单元测试：路径工具与「无控制台时的日志接管」。"""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
+import pytest
+
 import ui_kit
+
+
+def _close_log_handlers() -> None:
+    """关掉共用日志器上的所有 handler（释放日志文件，避免占用 tmp 目录）。"""
+    logger = logging.getLogger(ui_kit.LOG_NAME)
+    for h in list(logger.handlers):
+        logger.removeHandler(h)
+        h.close()
+
+
+@pytest.fixture(autouse=True)
+def _clean_log_handlers():
+    """每个用例前后都清空日志 handler（日志用例会往文件写并保持打开）。"""
+    _close_log_handlers()
+    yield
+    _close_log_handlers()
 
 
 def test_unique_path_adds_suffix(tmp_path: Path):
@@ -33,6 +52,20 @@ def test_enable_file_log_redirects_stdout_and_stderr(tmp_path, monkeypatch):
     text = log.read_text(encoding="utf-8")
     assert "走 stdout 的一行" in text
     assert "走 stderr 的一行" in text
+
+
+def test_enable_file_log_rotates(tmp_path, monkeypatch):
+    """日志超过单文件上限时轮转为 .1（避免日志无限增长）。"""
+    monkeypatch.setattr(ui_kit.sys, "stdout", None)
+    monkeypatch.setattr(ui_kit.sys, "stderr", None)
+    monkeypatch.setattr(ui_kit, "_LOG_MAX_BYTES", 200)
+    monkeypatch.setattr(ui_kit, "_LOG_BACKUPS", 2)
+    log = ui_kit.enable_file_log(tmp_path / "logs" / "r.log")
+    assert log is not None
+    for _ in range(60):
+        print("x" * 40)
+    assert log.exists()
+    assert (tmp_path / "logs" / "r.log.1").exists(), "超过上限后应轮转出 .1"
 
 
 def test_detect_hardware_never_raises_and_recommends_sane_workers():

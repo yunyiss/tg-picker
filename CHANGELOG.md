@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-10-13（工程化：日志改用 logging 并做轮转）
+
+### 背景
+`enable_file_log` 直接把 `sys.stdout/stderr` 接到一个普通文件（`open(..., "a")`），
+日志只增不减，长期运行会无限增长。
+
+### 修改
+改用标准库 `logging`：共用日志器 `tg_picker` + `RotatingFileHandler`（单文件
+2 MiB、保留 3 份）。无控制台（`pythonw`）时仍接管 `sys.stdout` / `sys.stderr`
+（经逐行 writer 转成 INFO / ERROR 记录），有控制台时保持原样不接管。
+
+### 验证
+- 原用例 `test_enable_file_log_redirects_stdout_and_stderr` 仍通过（stdout/stderr
+  内容确实落进了日志文件）；新增 `test_enable_file_log_rotates` 断言超过上限会
+  轮转出 `.1`。测试用 autouse fixture 关闭 handler，避免占用临时目录。
+- `ruff` 全绿；`pytest` 通过。
+
 ## 2026-10-13（重构：领域层不再拼装界面文案）
 
 ### 背景

@@ -13,10 +13,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import subprocess
 import sys
 from dataclasses import dataclass
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 from i18n import t
@@ -139,8 +141,41 @@ def gear_workers(key: str, info: HardwareInfo, recommended: int | None = None) -
     return max(1, rec)
 
 
+# ---------------------------------------------------------------------------
+# 日志：写入文件（带轮转），并在无控制台时接管 stdout / stderr
+# ---------------------------------------------------------------------------
+LOG_NAME = "tg_picker"              # 三个入口共用同一个日志器
+_LOG_MAX_BYTES = 2 * 1024 * 1024    # 单个日志文件上限 2 MiB
+_LOG_BACKUPS = 3                    # 保留的历史文件数
+
+
+class _LogWriter:
+    """把 ``print()`` / traceback 的输出喂给 logging（pythonw 无控制台时使用）。
+
+    逐行转发：stdout 记为 INFO、stderr 记为 ERROR（traceback 走 stderr）。
+    """
+
+    def __init__(self, logger: logging.Logger, level: int) -> None:
+        self._logger = logger
+        self._level = level
+        self._buf = ""
+
+    def write(self, text: str) -> int:
+        self._buf += text
+        while "\n" in self._buf:
+            line, self._buf = self._buf.split("\n", 1)
+            if line:
+                self._logger.log(self._level, line)
+        return len(text)
+
+    def flush(self) -> None:
+        if self._buf:
+            self._logger.log(self._level, self._buf)
+            self._buf = ""
+
+
 def enable_file_log(log_path: Path) -> Path | None:
-    """把标准输出/错误接到日志文件，用于 ``pythonw``（无控制台）启动时收集报错。
+    """把日志写入文件（带轮转），并在无控制台时接管 ``stdout`` / ``stderr``。
 
     为什么放在 Python 侧、而不是让 ``.cmd`` 做 ``>log`` 重定向：
 
@@ -150,15 +185,33 @@ def enable_file_log(log_path: Path) -> Path | None:
       ``.cmd`` 里的非 ASCII 踩过坑，这里不再让 shell 承担这类职责。
 
     只在**没有控制台**时接管（``sys.stderr is None``）；从终端用 ``python.exe`` 运行时
-    保留控制台输出，方便开发调试。返回日志文件路径；未接管时返回 ``None``。
+    保留控制台输出，方便开发调试。用 :class:`~logging.handlers.RotatingFileHandler`
+    做轮转，避免日志无限增长。返回日志文件路径；未接管时返回 ``None``。
     """
     if sys.stderr is not None:
         return None
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    stream = open(log_path, "a", encoding="utf-8", errors="replace", buffering=1)
-    sys.stdout = stream
-    sys.stderr = stream
+
+    logger = logging.getLogger(LOG_NAME)
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    # 同一进程内重复调用时不叠加 handler：先关掉旧文件再开新的
+    for old in list(logger.handlers):
+        logger.removeHandler(old)
+        try:
+            old.close()
+        except Exception:
+            pass
+    handler = RotatingFileHandler(
+        log_path, maxBytes=_LOG_MAX_BYTES, backupCount=_LOG_BACKUPS,
+        encoding="utf-8", errors="replace",
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    logger.addHandler(handler)
+
+    sys.stdout = _LogWriter(logger, logging.INFO)
+    sys.stderr = _LogWriter(logger, logging.ERROR)
     return log_path
 
 
