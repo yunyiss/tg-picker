@@ -9,6 +9,7 @@
   "firstrun.portable_desc": "Stored in a data folder next to the program; deleting the program folder removes everything — good if you delete the tool after use.",
   "firstrun.userdir_title": "User directory",
   "firstrun.userdir_desc": "Stored in the system user data directory; your config survives moving or upgrading the program.",
+  "firstrun.enter": "Use this →",
 
   "lang.label": "Language",
 
@@ -19,6 +20,7 @@
   "launch.mode.cache_desc": "Read images/videos cached by Telegram Desktop on this machine; no sign-in, pick and save directly.",
   "launch.mode.enter": "Click to enter →",
   "launch.hint": "Both modes only handle content you are allowed to access",
+  "launch.data_dir": "Cache / config location: {path}",
 
   "common.browse": "Browse…",
   "common.select_all": "Select all",

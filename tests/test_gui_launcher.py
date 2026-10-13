@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+import app_paths
 import i18n
 import launcher
 
@@ -102,3 +103,42 @@ def test_launcher_whole_card_is_clickable(tk_root):
     desc.event_generate("<Button-1>")
     assert isinstance(win.app, cp.CacheApp), "点说明文字应进入缓存模式"
     win.app._on_close()
+
+
+@pytest.mark.gui
+def test_launcher_shows_data_location_hint(tk_root):
+    """模式选择界面底部应显示数据（缓存/配置）位置提示。"""
+    win = launcher.Launcher(tk_root)
+    tk_root.update_idletasks()
+    expected = i18n.t("launch.data_dir", path=str(app_paths.data_dir()))
+    assert expected in _texts(tk_root, []), "缺少数据位置提示"
+    win._on_close()
+
+
+@pytest.mark.gui
+def test_launcher_picks_data_location_in_window_then_shows_modes(tmp_path, monkeypatch, tk_root):
+    """首次启动：**同窗口内**先选数据位置，选完变回模式选择，不另开窗口。"""
+    monkeypatch.delenv("TG_PICKER_DATA_DIR", raising=False)
+    monkeypatch.setattr(app_paths, "program_dir", lambda: tmp_path)
+    monkeypatch.setattr(app_paths, "_MODE", None)
+    monkeypatch.setattr(app_paths, "_DIR", None)
+
+    win = launcher.Launcher(tk_root)
+    tk_root.update_idletasks()
+
+    # 第一步：显示数据位置选择，而不是模式选择
+    texts = _texts(tk_root, [])
+    assert i18n.t("firstrun.portable_title") in texts, texts
+    assert i18n.t("launch.mode.api_title") not in texts, "还没选数据位置就出现了模式选择"
+
+    # 选择"便携"（整张卡片可点）
+    pick = _find_by_text(tk_root, i18n.t("firstrun.portable_title"))
+    assert pick is not None
+    pick.event_generate("<Button-1>")
+    tk_root.update_idletasks()
+
+    assert app_paths.saved_mode() == app_paths.PORTABLE
+    texts2 = _texts(tk_root, [])
+    assert i18n.t("launch.mode.cache_title") in texts2, "选完后应变回模式选择"
+    assert i18n.t("launch.data_dir", path=str(app_paths.data_dir())) in texts2, "未刷新位置提示"
+    win._on_close()

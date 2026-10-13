@@ -9,6 +9,7 @@
   "firstrun.portable_desc": "存在程序旁边的 data 文件夹；删掉程序目录即可清除全部痕迹，适合用完即删。",
   "firstrun.userdir_title": "用户目录",
   "firstrun.userdir_desc": "存在系统用户数据目录；移动或升级程序时不丢配置。",
+  "firstrun.enter": "选这个 →",
 
   "lang.label": "语言",
 
@@ -19,6 +20,7 @@
   "launch.mode.cache_desc": "读取本机 Telegram Desktop 缓存的图片/视频，无需登录，直接挑选并保存。",
   "launch.mode.enter": "点击进入 →",
   "launch.hint": "两种模式都只处理你有权访问的内容",
+  "launch.data_dir": "缓存 / 配置位置：{path}",
 
   "common.browse": "浏览…",
   "common.select_all": "全选",
