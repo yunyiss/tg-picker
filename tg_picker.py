@@ -189,18 +189,24 @@ class Prompter:
         self._event = threading.Event()
         self._value: str | None = None
 
-    def ask(self, kind: str, key: str, **kw) -> str | None:
-        """后台线程调用：发请求并阻塞等待 GUI 回填；超时或界面已关闭返回 None。
+    async def ask(self, kind: str, key: str, **kw) -> str | None:
+        """后台协程调用：发请求并**等待** GUI 回填；超时或界面已关闭返回 None。
 
         传的是**语言键 + 参数**而不是成文文案，这样界面切换语言时能按
         新语言重渲染这条待填写的提示。
 
-        必须带超时：本方法运行在 asyncio 事件循环线程上，若界面已销毁（或用户
-        一直不提交）而事件永不 set，整个 Worker 线程会永久卡死、busy 永不复位。
+        等待放在**独立线程**里（``asyncio.to_thread``）：若直接在事件循环线程上
+        ``Event.wait``，等待期间整个循环都会被占住——取消信号、其它协程都无法
+        推进。仍必须带超时：界面已销毁（或用户一直不提交）而事件永不 set 时，
+        不能让它永久挂住。
         """
         self._event.clear()
         self._value = None
         self.ui_q.put(("prompt", kind, key, kw))
+        return await asyncio.to_thread(self._wait_value)
+
+    def _wait_value(self) -> str | None:
+        """在独立线程里阻塞等待 GUI 回填；超时返回 None。"""
         if not self._event.wait(timeout=PROMPT_TIMEOUT):
             return None
         return self._value
@@ -270,7 +276,7 @@ class Worker:
                 if self.cancel.is_set():
                     self.post("log", t("online.log.cancelled"))
                     return
-                code = self.prompter.ask("code", "online.prompt.code", phone=phone)
+                code = await self.prompter.ask("code", "online.prompt.code", phone=phone)
                 if not code:
                     self.post("log", t("online.log.cancelled"))
                     return
@@ -279,7 +285,7 @@ class Worker:
                         phone=phone, code=code.strip(), phone_code_hash=sent.phone_code_hash
                     )
                 except errors.SessionPasswordNeededError:
-                    pw = self.prompter.ask("password", "online.prompt.password")
+                    pw = await self.prompter.ask("password", "online.prompt.password")
                     if not pw:
                         self.post("log", t("online.log.cancelled"))
                         return

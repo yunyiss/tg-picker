@@ -1,10 +1,13 @@
 """在线挑选器 GUI 冒烟测试（不联网、不登录）。
 
 覆盖：窗口构建、队列各分支、单元格创建与选中、语言切换、验证码回填。
+另有 1 条无需显示器的用例，覆盖 Prompter 等待输入时不阻塞事件循环。
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
+import queue
 import threading
 
 import pytest
@@ -57,8 +60,11 @@ def test_online_gui_builds_and_handles_messages(tk_root):
     result: dict[str, str | None] = {}
 
     def ask_later() -> None:
-        result["v"] = app.worker.prompter.ask("code", "online.prompt.code",
-                                             phone="+8613800000000")
+        result["v"] = asyncio.run_coroutine_threadsafe(
+            app.worker.prompter.ask("code", "online.prompt.code",
+                                   phone="+8613800000000"),
+            app.worker.loop,
+        ).result(timeout=10)
 
     def answer() -> None:
         app.e_prompt.insert(0, "12345")
@@ -72,3 +78,36 @@ def test_online_gui_builds_and_handles_messages(tk_root):
 
     assert result.get("v") == "12345", result
     app._on_close()
+
+
+def test_prompter_ask_does_not_block_event_loop():
+    """回归（P0-2）：等待验证码/密码时，事件循环仍能推进其它协程。
+
+    旧实现直接在事件循环线程上 ``Event.wait``，等待期间整个循环被占住，
+    取消信号与其它协程都无法推进。这里在独立线程跑一个事件循环，发起 ask 后
+    调度一个"心跳"协程——若循环被阻塞，心跳在 provide 之前永远不会执行。
+    """
+    ui_q: queue.Queue = queue.Queue()
+    prompter = tp.Prompter(ui_q)
+    loop = asyncio.new_event_loop()
+    runner = threading.Thread(target=loop.run_forever, daemon=True)
+    runner.start()
+    try:
+        fut = asyncio.run_coroutine_threadsafe(
+            prompter.ask("code", "online.prompt.code", phone="+8613800000000"), loop)
+        msg = ui_q.get(timeout=5)
+        assert msg[0] == "prompt", msg
+
+        beat = threading.Event()
+
+        async def beat_once() -> None:
+            beat.set()
+
+        asyncio.run_coroutine_threadsafe(beat_once(), loop)
+        assert beat.wait(2), "等待输入时事件循环被阻塞（其它协程无法运行）"
+
+        prompter.provide("12345")
+        assert fut.result(timeout=5) == "12345"
+    finally:
+        loop.call_soon_threadsafe(loop.stop)
+        runner.join(timeout=5)
