@@ -716,7 +716,14 @@ class CacheApp(LangMixin):
             self._apply_gear()
 
     def _apply_gear(self) -> None:
-        """按当前档位重建后台工作线程池（旧的整体关停，已排队的取消）。"""
+        """按当前档位重建后台工作线程池（旧的整体关停，已排队的取消）。
+
+        关键：被取消的排队任务**不会投递结果**，其下标会永久留在
+        ``thumb_pending`` 里；而 ``_thumb_for`` 见到 ``idx in thumb_pending``
+        就不再重新请求——这些格子会一直停在占位图/空白。因此在关停旧池后，
+        统一释放旧池占用的待载下标，并按当前可见区在新池上重新请求
+        （可见格子立即重发，不可见的等滚到时再发）。
+        """
         old = self.pool
         self.pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=self._gear_workers(self.v_gear.get()))
@@ -725,6 +732,11 @@ class CacheApp(LangMixin):
                 old.shutdown(wait=False, cancel_futures=True)
             except Exception:
                 pass
+            # 旧池的排队任务此刻已取消、运行中的也会自行投递结果；
+            # 无论哪种，其下标都由下面的 refresh_view 在当前新池上重新认领。
+            if self.thumb_pending:
+                self.thumb_pending.clear()
+                self.refresh_view()
 
     def on_sort_change(self) -> None:
         """下拉选择 → 映射回内部键（文案随语言变，逻辑只看键）。"""

@@ -6,10 +6,14 @@
 """
 from __future__ import annotations
 
+import io
+import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from PIL import Image
 
 import cache_picker as cp
 import i18n
@@ -299,4 +303,68 @@ def test_select_all_box_is_tristate_in_sync(tk_root):
     app.on_toggle_all()
     assert not any(v.get() for v in app.v_formats.values()), "再点应取消所有格式"
     assert app.v_all.get() == "0"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_gear_change_does_not_strand_pending_thumbnails(tk_root):
+    """改「性能档位」时，已排队但尚未执行的缩略图任务不能被永久丢弃。
+
+    回归测试（P0-1）：旧实现在重建线程池时用 ``cancel_futures=True`` 取消排队
+    任务，而被取消的任务**不会投递结果**，其下标会永久留在 ``thumb_pending``；
+    ``_thumb_for`` 见到 ``idx in thumb_pending`` 就不再重新请求，于是这些格子
+    一直停在占位图/空白，除非重扫或清缓存。这里用单线程（保守档）制造"排队"，
+    再模拟改档位，断言排队中的那条最终仍能拿到缩略图。
+    """
+    app = cp.CacheApp(tk_root)
+    app.v_gear.set("conservative")
+    app._apply_gear()                       # 单线程：便于让第二个任务进入排队
+
+    buf = io.BytesIO()
+    Image.new("RGB", (8, 8), (30, 60, 90)).save(buf, "PNG")
+    png = buf.getvalue()
+
+    started = threading.Event()
+    gate = threading.Event()
+
+    class SlowReader:
+        """解密被闸门挡住，用来把第二个任务稳定地卡在"排队"状态。"""
+
+        def decrypt(self, path: str) -> bytes:
+            started.set()
+            gate.wait(5)
+            return png
+
+    app.reader = SlowReader()
+
+    def make_item(rel: str) -> cp.MediaItem:
+        entry = SimpleNamespace(
+            rel=rel, label="cache", mtime=1_700_000_000.0, enc_size=100,
+            kind="image", ext=".jpg", size=100, thumb_key="",
+            cache_path=Path("dummy"),
+        )
+        return cp.MediaItem(entry=entry)
+
+    app.items = [make_item("a"), make_item("b")]
+    app.all_items = list(app.items)
+    app.root.update()                       # 让画布拿到真实尺寸
+
+    app._request_thumb(0, app.items[0])
+    assert started.wait(5), "首个解码任务未开始，无法制造排队"
+    app._request_thumb(1, app.items[1])     # 单线程下进入排队
+    assert 1 in app.thumb_pending
+
+    app._apply_gear()                       # 改档位：重建线程池（修复点）
+
+    gate.set()                              # 放行，让新旧任务都能跑完
+    deadline = time.time() + 10
+    while time.time() < deadline and not {0, 1} <= set(app.thumb_mem):
+        app._drain_photos()
+        app.root.update()
+        time.sleep(0.02)
+
+    assert {0, 1} <= set(app.thumb_mem), (
+        f"改档位后缩略图卡死：thumbs={sorted(app.thumb_mem)} "
+        f"pending={sorted(app.thumb_pending)} failed={sorted(app.thumb_failed)}"
+    )
     app._on_close()
