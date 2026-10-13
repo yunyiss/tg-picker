@@ -361,6 +361,24 @@ python -m venv .venv
 - 测试**不会**改写你的语言偏好（只调 `i18n.set_language`，不调会写
   `language.json` 的 `on_lang_change`），也不会写入 tdata。
 
+### 打包与发布
+
+发布形态是**独立可执行包**：三平台各自构建一次，内置随包分发的裁剪版 ffmpeg，
+用户下载解压即用（无需 Python / 无需安装任何依赖）。构建脚本在 `packaging/`：
+
+```cmd
+:: 1) 构建"只解码"的最小 ffmpeg（约 5MB；需要 gcc + nasm + make）
+bash packaging/build_ffmpeg.sh ffmpeg-bin
+:: 2) 打成 onedir（默认输出 dist/tg-picker）
+python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
+```
+
+- Windows 上第 1 步建议在 **Git Bash + MinGW-w64**（`gcc`/`nasm`/`mingw32-make`）下执行。
+- 打 tag（`v*`）会触发 `.github/workflows/release.yml`：`ubuntu` / `macos` / `windows`
+  三平台各构建一次，打成 zip 并附到 GitHub Release。
+- **二进制不进仓库**：仓库只存构建脚本与那份 `configure` 配方（`packaging/build_ffmpeg.sh`）；
+  `dist/`、`build/` 均已加入 `.gitignore`。
+
 ### 代码风格
 
 - `ruff` 只启用确定性检查（`E/F/I/UP/B`），**不做**格式化重排；`_vendor/` 不参与检查。

@@ -1,5 +1,23 @@
 # 变更记录
 
+## 2026-10-14（发布准备：CI 打包流水线）
+
+### 修改
+- 新增 `packaging/build_ffmpeg.sh`：把"只解码"最小 ffmpeg 的 **configure 配方**固化为构建脚本
+  （跨平台：Windows 走 MSYS2/MinGW，macOS/Linux 各用自家工具链；用 gzip 解压，不依赖 xz）。
+- 新增 `packaging/build_app.py`：用 PyInstaller 打成 **onedir** 发布包并内置该 ffmpeg；
+  按需导入的模块显式声明、开发期模块一律排除。
+- 新增 `.github/workflows/release.yml`：打 tag（`v*`）或手动触发时，`ubuntu`/`macos`/`windows`
+  各构建一次、打成 zip 并附到 GitHub Release。**仓库只存脚本与配方，二进制不入库。**
+- `requirements-dev.txt` 增加 `pyinstaller`（本地打包用）；README（中/英）增加"打包与发布"小节。
+
+### 验证（本机 Windows 实跑）
+- `build_ffmpeg.sh`：下载 7.1 源码 → configure → 编译，产出 **4.7 MB** `ffmpeg.exe`。
+- `build_app.py`：onedir **49.7 MB**，`ffmpeg.exe` / `locales/` / `_vendor/` 均在包内。
+- 冻结件启动验证：预置"便携"后启动，程序旁自动生成 `data/logs/`，启动器窗口正常、日志无报错。
+- `ruff` / `mypy` / `pytest`（60 passed）不受影响。
+- 说明：`release.yml` 无法在本地执行，首次打 tag 时由 CI 验证。
+
 ## 2026-10-14（发布准备：首次启动选择数据存放位置）
 
 ### 修改

@@ -1,0 +1,94 @@
+name: Release build
+
+# 打包"独立可执行包"：三平台各自构建一次（PyInstaller 不能交叉编译），
+# 内置随包分发的裁剪版 ffmpeg（见 packaging/build_ffmpeg.sh）。
+# 触发：打 tag（v*）或手动 workflow_dispatch；产物挂到 GitHub Release。
+#
+# 说明：仓库只存**构建脚本与配方**，二进制不进 git（控仓库体积）。
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: 安装 ffmpeg 构建工具（Linux）
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential nasm
+
+      - name: 安装 ffmpeg 构建工具（macOS）
+        if: runner.os == 'macOS'
+        run: brew install nasm
+
+      - name: 准备 MSYS2 工具链（Windows）
+        if: runner.os == 'Windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: false
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-nasm
+
+      - name: 构建裁剪版 ffmpeg（Linux/macOS）
+        if: runner.os != 'Windows'
+        run: bash packaging/build_ffmpeg.sh ffmpeg-bin
+
+      - name: 构建裁剪版 ffmpeg（Windows / MSYS2）
+        if: runner.os == 'Windows'
+        shell: msys2 {0}
+        run: bash packaging/build_ffmpeg.sh ffmpeg-bin
+
+      - name: 安装运行依赖与 PyInstaller
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt pyinstaller
+
+      - name: 打包（PyInstaller onedir）
+        shell: bash
+        run: |
+          FF="ffmpeg-bin/ffmpeg"
+          [ "$RUNNER_OS" = "Windows" ] && FF="ffmpeg-bin/ffmpeg.exe"
+          python packaging/build_app.py "$FF" --dist dist
+
+      - name: 打成 zip
+        run: python -c "import shutil; shutil.make_archive('tg-picker-${{ matrix.os }}', 'zip', 'dist', 'tg-picker')"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tg-picker-${{ matrix.os }}
+          path: tg-picker-${{ matrix.os }}.zip
+          if-no-files-found: error
+
+  release:
+    name: attach to release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: 创建/更新 Release 并附上三平台产物
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" artifacts/*.zip --generate-notes

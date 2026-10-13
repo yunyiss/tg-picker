@@ -417,6 +417,25 @@ python -m venv .venv
   `i18n.set_language`, never the preference-writing `on_lang_change`) and never write
   into tdata.
 
+### Packaging & release
+
+The release artifact is a **standalone bundle**: built once per platform with the slimmed
+ffmpeg bundled inside, so users just download, unzip and run (no Python, no dependency
+installation). Build scripts live in `packaging/`:
+
+```cmd
+:: 1) build the decode-only minimal ffmpeg (~5MB; needs gcc + nasm + make)
+bash packaging/build_ffmpeg.sh ffmpeg-bin
+:: 2) build the onedir bundle (defaults to dist/tg-picker)
+python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
+```
+
+- On Windows, run step 1 under **Git Bash + MinGW-w64** (`gcc` / `nasm` / `mingw32-make`).
+- Pushing a tag (`v*`) triggers `.github/workflows/release.yml`, which builds on
+  `ubuntu` / `macos` / `windows`, zips each bundle and attaches them to a GitHub Release.
+- **Binaries are not committed**: the repo holds only the build scripts and the `configure`
+  recipe (`packaging/build_ffmpeg.sh`); `dist/` and `build/` are git-ignored.
+
 ### Code style
 
 - `ruff` runs only deterministic checks (`E/F/I/UP/B`) and performs **no** reformatting;
