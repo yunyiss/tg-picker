@@ -36,6 +36,7 @@ from PIL import Image, ImageTk
 import cache_source as cs
 import i18n
 import ui_kit
+import ui_style
 from i18n import t
 from ui_kit import (
     FONT,
@@ -376,10 +377,7 @@ class CacheApp(LangMixin):
         必须连 bordercolor / lightcolor / darkcolor 一起覆盖。
         """
         st = ttk.Style()
-        try:
-            st.theme_use("clam")
-        except tk.TclError:
-            pass
+        ui_style.use_clam(st)
         self._style_containers(st)
         self._style_labels(st)
         self._style_buttons(st)
@@ -438,17 +436,9 @@ class CacheApp(LangMixin):
                darkcolor=[("active", ACCENT_HOVER)])
 
         # 分段按钮（替代 clam 无法配色的单选钮）：未选=平底，选中=蓝色实底
-        st.configure("Seg.TButton", font=(FONT, 9), padding=(14, 5),
-                     background=BTN, foreground=SUB,
-                     borderwidth=0, relief="flat",
-                     bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
-        st.map("Seg.TButton",
-               background=[("active", "#383842")], foreground=[("active", FG)])
-        st.configure("SegOn.TButton", font=(FONT, 9, "bold"), padding=(14, 5),
-                     background=ACCENT, foreground="#ffffff",
-                     borderwidth=0, relief="flat",
-                     bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
-        st.map("SegOn.TButton", background=[("active", ACCENT_HOVER)])
+        ui_style.segmented_buttons(
+            st, base_bg=BTN, base_fg=SUB, hover_bg="#383842", hover_fg=FG,
+            accent=ACCENT, accent_hover=ACCENT_HOVER, padding=(14, 5))
 
     def _style_inputs(self, st: ttk.Style) -> None:
         """输入框与下拉框：显式压掉 clam 的浅色描边。"""

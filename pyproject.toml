@@ -58,7 +58,7 @@ markers = [
 # ---------------------------------------------------------------------------
 [tool.mypy]
 python_version = "3.11"
-files = ["cache_source.py", "ui_kit.py", "ui_lang.py", "i18n.py"]
+files = ["cache_source.py", "ui_kit.py", "ui_lang.py", "ui_style.py", "i18n.py"]
 ignore_missing_imports = true
 check_untyped_defs = true
 warn_unused_ignores = true

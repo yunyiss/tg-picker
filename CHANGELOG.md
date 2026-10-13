@@ -1,5 +1,24 @@
 # 变更记录
 
+## 2026-10-13（重构：收敛三个界面重复的 ttk 样式代码）
+
+### 背景
+三个界面（`launcher` / `cache_picker` / `tg_picker`）各自重写了一遍
+`theme_use("clam")` 与分段按钮（`Seg` / `SegOn`）的样式构造，且都带着"clam 会
+自绘浅色 chrome、必须显式覆盖 bordercolor/lightcolor/darkcolor"这条教训——
+一处踩坑要改三遍。
+
+### 修改
+- 新增 `ui_style.py`：`use_clam(st)` 与 `segmented_buttons(...)`。只共享**构造
+  逻辑**，颜色仍由各界面传入（与 `ui_kit` 共享字体、`ui_lang` 共享语言机制同一
+  思路，不合并刻意不同的配色）。
+- 三个界面改为调用它，配色逐项对照原值传入，**视觉不变**。
+- mypy 覆盖范围加入 `ui_style.py`；README（中/英）文件清单同步补该模块。
+
+### 验证
+- `ruff` / `mypy`（5 files）全绿；`pytest` **49 passed**（含 GUI：三个界面均能
+  构建、语言切换正常）。
+
 ## 2026-10-13（工程化：引入 mypy 类型检查）
 
 ### 修改

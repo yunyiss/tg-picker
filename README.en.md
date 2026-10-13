@@ -203,6 +203,7 @@ never scrolled past in the client).
 | `i18n.py` | Internationalization core: loads language resources, `t(key)` lookups, switches language and notifies the UI to refresh |
 | `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O / hardware detection, concurrency tier recommendation and low-spec clamping) and shared constants |
 | `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by all three screens |
+| `ui_style.py` | Shared ttk style builders for the three screens (clam theme and segmented buttons; colors are per-screen) |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
 | `run.cmd` | Launcher script (calls `launcher.py`) |
@@ -354,7 +355,7 @@ tg-picker/
 ├─ cache_picker.py / tg_picker.py the two modes (GUI)
 ├─ cache_source.py                cache decryption and indexing (must stay next to _vendor/)
 ├─ i18n.py                        translation core
-├─ ui_kit.py / ui_lang.py         shared helpers and the language-switching UI mechanism
+├─ ui_kit.py / ui_lang.py / ui_style.py   shared helpers, language mechanism, style builders
 ├─ locales/                       language resources (zh.json / en.json)
 ├─ _vendor/tg_scoop/              decryption core (verbatim upstream copy)
 ├─ tests/                         pytest suite

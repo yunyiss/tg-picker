@@ -38,6 +38,7 @@ from telethon.tl.types import (
 
 import i18n
 import ui_kit
+import ui_style
 from i18n import t
 from ui_kit import FONT, human_size, unique_path
 from ui_lang import LangMixin
@@ -618,10 +619,7 @@ class App(LangMixin):
     # ---------- 样式与布局 ----------
     def _build_style(self) -> None:
         st = ttk.Style()
-        try:
-            st.theme_use("clam")
-        except tk.TclError:
-            pass
+        ui_style.use_clam(st)
         st.configure("TFrame", background=BG)
         st.configure("TLabel", background=BG, foreground=FG)
         st.configure("Sub.TLabel", background=BG, foreground=SUB, font=(FONT, 8))
@@ -633,17 +631,9 @@ class App(LangMixin):
         st.configure("TCombobox", fieldbackground="#2b2b2b", foreground=FG)
         st.configure("Horizontal.TProgressbar", background="#1f6feb", troughcolor="#2b2b2b")
         # 分段按钮：语言切换用（与缓存挑选器一致的表达方式）
-        st.configure("Seg.TButton", font=(FONT, 9), padding=(10, 3),
-                     background="#2b2b2b", foreground=SUB,
-                     borderwidth=0, relief="flat",
-                     bordercolor="#2b2b2b", lightcolor="#2b2b2b", darkcolor="#2b2b2b")
-        st.map("Seg.TButton",
-               background=[("active", "#3a3a3a")], foreground=[("active", FG)])
-        st.configure("SegOn.TButton", font=(FONT, 9, "bold"), padding=(10, 3),
-                     background="#1f6feb", foreground="#ffffff",
-                     borderwidth=0, relief="flat",
-                     bordercolor="#1f6feb", lightcolor="#1f6feb", darkcolor="#1f6feb")
-        st.map("SegOn.TButton", background=[("active", "#2b7bf5")])
+        ui_style.segmented_buttons(
+            st, base_bg="#2b2b2b", base_fg=SUB, hover_bg="#3a3a3a", hover_fg=FG,
+            accent="#1f6feb", accent_hover="#2b7bf5", padding=(10, 3))
 
     # ---------- i18n（差异部分；通用机制见 ui_lang.LangMixin）----------
     def _window_title(self) -> str:

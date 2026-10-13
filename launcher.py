@@ -24,6 +24,7 @@ from tkinter import ttk
 
 import i18n
 import ui_kit
+import ui_style
 from i18n import t
 from ui_kit import FONT
 from ui_lang import LangMixin
@@ -74,10 +75,7 @@ class Launcher(LangMixin):
 
     def _build_style(self) -> None:
         st = ttk.Style()
-        try:
-            st.theme_use("clam")
-        except tk.TclError:
-            pass
+        ui_style.use_clam(st)
         st.configure("TFrame", background=BG)
         st.configure("TLabel", background=BG, foreground=FG, font=(FONT, 9))
         st.configure("Title.TLabel", background=BG, foreground=FG,
@@ -99,17 +97,9 @@ class Launcher(LangMixin):
         st.configure("CardHoverEnter.TLabel", background=CARD_HOVER, foreground=ACCENT,
                      font=(FONT, 9, "bold"))
         # 语言切换分段按钮（与两个模式界面同一表达方式）
-        st.configure("Seg.TButton", font=(FONT, 9), padding=(10, 3),
-                     background=BTN, foreground=SUB,
-                     borderwidth=0, relief="flat",
-                     bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
-        st.map("Seg.TButton",
-               background=[("active", CARD_HOVER)], foreground=[("active", FG)])
-        st.configure("SegOn.TButton", font=(FONT, 9, "bold"), padding=(10, 3),
-                     background=ACCENT, foreground="#ffffff",
-                     borderwidth=0, relief="flat",
-                     bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
-        st.map("SegOn.TButton", background=[("active", "#4b8ef7")])
+        ui_style.segmented_buttons(
+            st, base_bg=BTN, base_fg=SUB, hover_bg=CARD_HOVER, hover_fg=FG,
+            accent=ACCENT, accent_hover="#4b8ef7", padding=(10, 3))
 
     # ---------- 界面 ----------
     def _build_header(self) -> None:

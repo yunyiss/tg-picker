@@ -166,6 +166,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `i18n.py` | 国际化内核：载入语言资源、`t(key)` 取词、切换语言并通知界面刷新 |
 | `ui_kit.py` | 与界面无关的通用工具（`human_size` / `unique_path` / 配置读写 / 硬件检测、并发档位推荐与低配钳制）与共享常量 |
 | `ui_lang.py` | 语言切换的界面机制（`LangMixin`），三个界面共用 |
+| `ui_style.py` | 三个界面共用的 ttk 样式构造（clam 主题与分段按钮；颜色由各界面自定） |
 | `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run.cmd` | 启动脚本（调用 `launcher.py`） |
@@ -304,7 +305,7 @@ tg-picker/
 ├─ cache_picker.py / tg_picker.py 两个模式（GUI）
 ├─ cache_source.py                缓存解密与索引（必须与 _vendor/ 同级）
 ├─ i18n.py                        翻译内核
-├─ ui_kit.py / ui_lang.py         共享工具与语言切换界面机制
+├─ ui_kit.py / ui_lang.py / ui_style.py   共享工具、语言机制与样式构造
 ├─ locales/                       语言资源（zh.json / en.json）
 ├─ _vendor/tg_scoop/              解密内核（上游原样副本）
 ├─ tests/                         pytest 测试
