@@ -9,18 +9,21 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }}
+    name: ${{ matrix.os }} / py${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest]
+        # requires-python 是 >=3.11，这里把三个受支持的版本都跑一遍，
+        # 避免"声明的下限"从未被验证过。
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.13"
+          python-version: ${{ matrix.python-version }}
 
       - name: 安装 Tk（Linux 无内置 Tk，conftest 顶层 import tkinter 需要它）
         if: runner.os == 'Linux'
