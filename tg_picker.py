@@ -240,6 +240,20 @@ def parse_proxy(text: str) -> tuple | None:
     return (kind, u.hostname, u.port)
 
 
+def mask_proxy(text: str) -> str:
+    """把代理串里的账号密码掩码后再显示 / 记日志（凭据不该进日志文件）。
+
+    ``http://user:pass@host:port`` → ``http://***:***@host:port``；
+    ``user:pass@host:port`` → ``***:***@host:port``；不含凭据的原样返回。
+    """
+    text = (text or "").strip()
+    creds, at, host = text.rpartition("@")
+    if not at:
+        return text
+    scheme = creds.split("://", 1)[0] + "://" if "://" in creds else ""
+    return f"{scheme}***:***@{host}"
+
+
 def resolve_proxy_text() -> str:
     """代理来源优先级：环境变量 ``TG_PICKER_PROXY`` > 配置里的 ``proxy``。"""
     env = os.environ.get("TG_PICKER_PROXY", "").strip()
@@ -247,6 +261,26 @@ def resolve_proxy_text() -> str:
         return env
     value = load_config().get("proxy")
     return value.strip() if isinstance(value, str) else ""
+
+
+def harden_session_file() -> None:
+    """把 Telethon 会话文件的权限收紧到「仅本人可读写」。
+
+    该文件是明文 SQLite、内含登录密钥，等同登录凭证；而它由 Telethon 自己创建、
+    不设权限，POSIX 上会跟随 umask（常见 0644 ⇒ 同机其它用户可读即可接管账号）。
+    因此启动时与登录成功后各收一次权限（含 SQLite 的 ``-journal`` / ``-wal`` 兄弟文件）。
+
+    **只在 POSIX 上真正生效**：Windows 的 ``os.chmod`` 只能切换只读位、不构成访问
+    控制，Windows 下的保护取决于数据目录自身的 ACL（见 README「安全边界」）。
+    文件不存在或收权限失败一律忽略——这是加固，不该影响使用。
+    """
+    for suffix in ("", "-journal", "-wal"):
+        path = Path(f"{SESSION_PATH}.session{suffix}")
+        try:
+            if path.exists():
+                path.chmod(0o600)
+        except OSError:
+            pass
 
 
 # --------------------------------------------------------------------------
@@ -304,6 +338,27 @@ class Worker:
     def _run_loop(self) -> None:
         asyncio.set_event_loop(self.loop)
         self.loop.run_forever()
+
+    def shutdown(self) -> None:
+        """关闭窗口时收尾：断开 Telegram 连接（顺带 flush 会话文件）并停掉后台循环。
+
+        以前只置取消位就销毁窗口：``loop.run_forever()`` 永不停止、客户端也不
+        ``disconnect()``，会话文件与套接字都不是干净关闭（仅靠 daemon 线程在进程
+        退出时兜底）。这里把「断开 → 停循环」串成**一个协程**，既不阻塞界面线程，
+        又能保证顺序（先断开、后停循环）。
+        """
+        async def _shutdown() -> None:
+            if self.client is not None:
+                try:
+                    await self.client.disconnect()
+                except Exception:
+                    pass
+            self.loop.stop()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_shutdown(), self.loop)
+        except Exception:
+            pass
 
     def submit(self, coro, label: str | None = None) -> None:
         """把协程投递到后台事件循环；未捕获的异常兜底记入日志并复位忙碌态。"""
@@ -681,6 +736,7 @@ class App(LangMixin):
         self._build_actions()
         self._build_log()
         self._load_config_into_form()
+        harden_session_file()               # 旧版本遗留的松权限会话文件，启动时一并收紧
 
         self._enable_lang_support()
 
@@ -1055,7 +1111,8 @@ class App(LangMixin):
             return
         save_config({"proxy": proxy_text})       # 记住代理设置，下次启动回填
         if proxy:
-            self.log(t("online.log.proxy_set", proxy=proxy_text))
+            # 掩码后再记：带 user:pass 的代理串不该落进日志文件
+            self.log(t("online.log.proxy_set", proxy=mask_proxy(proxy_text)))
         self.set_busy(True)
         self.worker.submit(self.worker.login(api_id, api_hash, phone, proxy=proxy),
                            label=t("online.task.login"))
@@ -1342,10 +1399,11 @@ class App(LangMixin):
         self.e_prompt.focus_set()
 
     def _msg_logged_in(self, msg: tuple) -> None:
-        """登录成功：记住显示名并刷新登录状态标签。"""
+        """登录成功：记住显示名、刷新登录状态标签，并收一次会话文件权限。"""
         self.logged_in = True
         self.who = msg[1] or ""
         self.l_login.configure(text=self._login_text())
+        harden_session_file()
 
     def _msg_busy(self, msg: tuple) -> None:
         """忙碌态变更：统一由 set_busy 处理按钮可用性。"""
@@ -1424,12 +1482,13 @@ class App(LangMixin):
             self.pb.configure(value=0)
 
     def _on_close(self) -> None:
-        """关闭窗口：取消后台任务、唤醒可能正阻塞等待输入的协程，再销毁窗口。"""
+        """关闭窗口：取消后台任务、收尾 Telegram 连接与事件循环，再销毁窗口。"""
         try:
             self.worker.cancel.set()
             self.worker.prompter.provide(None)
         except Exception:
             pass
+        self.worker.shutdown()               # 断开连接 + 停掉后台事件循环（不阻塞界面）
         self._disable_lang_support()
         for job in (self._pump_job, self._resize_job):
             if job is not None:

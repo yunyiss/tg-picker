@@ -1,5 +1,40 @@
 # 变更记录
 
+## 2026-10-14（交付前审查修复：串图竞态 + 凭据/日志隐私加固 + API 退出收尾）
+
+### M1 · 缓存模式缩略图「串图」竞态（正确性）
+- **现象**：缩略图结果按**列表下标**回传，而筛选 / 排序 / 搜索 / 重扫都会换掉 `self.items`。旧实现只清
+  `thumb_mem`/`thumb_pending`，既不清 `photo_queue` 也不校验身份 ⇒ 在途的旧结果会贴到"现在位于同一下标的
+  另一条媒体"上，并被 `thumb_mem`（同样以下标为键）长期记住——**显示的是错的图**。新旧列表等长时（例如只改排序）
+  连越界判断都拦不住。
+- **修改**：`_request_thumb` 结果里带上身份键 `rel`；`_drain_photos` 用 `str(items[idx].entry.rel) != rel` 复核，
+  不一致**整条丢弃**（不写 `thumb_mem`、也不动 `thumb_pending`，校验放在 PIL→PhotoImage 转换之前）；
+  新增 `_clear_photo_queue()`，在 `on_filter_change` / `_reset_grid_data` 换列表时清掉在途结果。
+- **验证**：新增回归用例，**临时去掉身份校验可稳定复现失败**（旧结果贴到 idx0 的新条目上），加回后通过。
+
+### 隐私加固（代理密码 / 会话文件）
+- **代理密码曾按原文写进日志**：`online.log.proxy_set` 直接记用户输入的代理串，带 `user:pass` 的写法会把密码
+  落进 `data/logs/tg_picker.log`。→ 新增 `mask_proxy()`，记录前掩码 userinfo（保留主机端口，便于排查连不上）。
+- **会话文件从未收紧权限**：`config.json` 写入后是 `0o600`，但 Telethon 自建的 `tg_picker_session.session`
+  （明文 SQLite、内含登录密钥，等同凭证）一直跟随 umask（POSIX 常见 `0644`）。→ 新增 `harden_session_file()`，
+  **启动时与每次登录成功后**各收一次（含 SQLite 的 `-journal` / `-wal` 兄弟文件）。
+- **文档补齐 Windows 上的真相**：`os.chmod` 在 Windows 上只能切换只读位、**不构成访问控制**，所以
+  "凭据受 0600 保护"在 Windows 上并不成立。→ README 中/英与 `ui_kit.save_config` 的文档都写明这一点，
+  并指出 Windows 下应依赖数据目录自身的 ACL。
+
+### API 模式退出收尾（健壮性）
+- **现象**：`_on_close` 只置取消位就销毁窗口，`loop.run_forever()` 永不停止、`TelegramClient` 也不
+  `disconnect()`（仅靠 daemon 线程在进程退出时兜底，会话文件与套接字不是干净关闭）。
+- **修改**：新增 `Worker.shutdown()`，把「`client.disconnect()` → `loop.stop()`」串成**一个协程**投递到事件
+  循环：既不阻塞界面线程，又能保证"先断开、后停循环"的顺序。
+
+### 验证
+- 新增 5 条用例：`mask_proxy` 的掩码规则、登录日志**与该掩码后的渲染完全相等**（守住"接线处"，不只是测纯函数）、
+  会话文件收权限（POSIX 上断言确为 `0600`）、启动与登录后各收一次（monkeypatch 拦到调用）、关闭后事件循环确实停止。
+- 顺带修掉一处**用例间的数据目录污染**：前一条用例把 proxy 存进会话共享的临时数据目录，后一条构造窗口时会被回填，
+  输入框变成拼接串导致用例结果"看执行顺序"。改为先清空字段，做到顺序无关。
+- `ruff` / `mypy`（6 files）全绿；`pytest` **90 passed**。
+
 ## 2026-10-14（修复：CI 的 Linux 一路从建立起就一直红——mypy 报 Windows 专有属性）
 
 ### 现象

@@ -7,8 +7,11 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import os
 import queue
+import stat
 import threading
+import time
 
 import pytest
 
@@ -268,6 +271,9 @@ def test_online_credentials_row_has_no_big_gap(tk_root):
 def test_online_login_passes_parsed_proxy(tk_root, monkeypatch):
     """填了代理时，登录任务应带上解析后的 proxy 参数（保持原功能逻辑）。"""
     app = tp.App(tk_root)
+    # 同上：清掉启动时回填的值，避免依赖"本用例排在第几个"
+    for entry in (app.e_api_id, app.e_api_hash, app.e_phone, app.e_proxy):
+        entry.delete(0, "end")
     app.e_api_id.insert(0, "123")
     app.e_api_hash.insert(0, "y" * 32)
     app.e_phone.insert(0, "+8613800000000")
@@ -288,4 +294,85 @@ def test_online_login_passes_parsed_proxy(tk_root, monkeypatch):
     assert captured["proxy"] == ("socks5", "127.0.0.1", 7897)
     assert captured["api_id"] == 123
     assert captured["phone"] == "+8613800000000"
+    app._on_close()
+
+
+def test_mask_proxy_hides_credentials():
+    """带 user:pass 的代理串在显示 / 记日志前必须掩码（否则密码会落到日志文件里）。"""
+    assert tp.mask_proxy("http://user:pass@127.0.0.1:8080") == \
+        "http://***:***@127.0.0.1:8080"
+    assert tp.mask_proxy("user:pass@1.2.3.4:1080") == "***:***@1.2.3.4:1080"
+    assert tp.mask_proxy("socks5://127.0.0.1:7897") == "socks5://127.0.0.1:7897"
+    assert tp.mask_proxy("") == ""
+
+
+def test_harden_session_file_permissions(tmp_path, monkeypatch):
+    """会话文件等同登录凭证：写入后应把权限收到 0600（POSIX 可验证；Windows 为 no-op）。"""
+    monkeypatch.setattr(tp, "SESSION_PATH", str(tmp_path / "tg_picker_session"))
+    tp.harden_session_file()                      # 文件不存在时不应报错
+
+    sess = tmp_path / "tg_picker_session.session"
+    sess.write_text("x", encoding="utf-8")
+    sess.chmod(0o644)
+    tp.harden_session_file()
+    assert sess.exists(), "收权限不应影响文件本身"
+    if os.name == "posix":
+        assert stat.S_IMODE(sess.stat().st_mode) == 0o600, "会话文件权限应收到 0600"
+
+
+@pytest.mark.gui
+def test_api_close_stops_worker_loop(tk_root):
+    """回归：关闭窗口应断开连接并停掉后台事件循环（旧实现 loop 永不停止）。"""
+    app = tp.App(tk_root)
+    assert app.worker.loop.is_running()
+    app._on_close()
+    deadline = time.time() + 5
+    while time.time() < deadline and app.worker.loop.is_running():
+        time.sleep(0.05)
+    assert not app.worker.loop.is_running(), "关闭后后台事件循环应停止"
+
+
+@pytest.mark.gui
+def test_login_log_line_uses_masked_proxy(tk_root):
+    """回归：登录时那条「使用代理」日志必须渲染**掩码后**的串。
+
+    旧实现把用户输入的原文写进日志 ⇒ 带 user:pass 的代理会把密码落进
+    `data/logs/tg_picker.log`。这里断言日志与该为掩码后的渲染**完全相等**。
+    """
+    raw = "http://alice:s3cret@127.0.0.1:8080"
+    app = tp.App(tk_root)
+    # 先清空：会话共享同一个临时数据目录，前面的用例可能把代理存进 config.json，
+    # 启动时会被回填到输入框，直接 insert 会拼成一个无效串（用例就变成"看执行顺序"）
+    for entry in (app.e_api_id, app.e_api_hash, app.e_phone, app.e_proxy):
+        entry.delete(0, "end")
+    app.e_api_id.insert(0, "123")
+    app.e_api_hash.insert(0, "y" * 32)
+    app.e_phone.insert(0, "+8613800000000")
+    app.e_proxy.insert(0, raw)
+    logged: list[str] = []
+    app.log = logged.append                      # 拦下界面日志（= 写进日志文件的内容）
+    app.worker.login = lambda *a, **kw: asyncio.sleep(0)
+    app.worker.submit = lambda coro, label=None: coro.close()
+    app.on_login()
+
+    assert logged == [i18n.t("online.log.proxy_set", proxy=tp.mask_proxy(raw))]
+    assert "s3cret" not in logged[0] and "alice" not in logged[0], "凭据不得进日志"
+    assert "127.0.0.1:8080" in logged[0], "主机端口应当保留（便于排查连不上）"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_session_file_is_hardened_at_startup_and_after_login(tk_root, monkeypatch):
+    """回归：会话文件权限既要在启动时收，也要在每次登录成功后收。
+
+    （`harden_session_file` 自身的行为由 `test_harden_session_file_permissions`
+    覆盖；这里只断言"接线"没漏——漏接就等于没加固。）
+    """
+    calls: list[int] = []
+    monkeypatch.setattr(tp, "harden_session_file", lambda: calls.append(1))
+    app = tp.App(tk_root)
+    assert calls, "启动时应收紧一次会话文件权限"
+    before = len(calls)
+    app._msg_logged_in(("logged_in", "someone"))
+    assert len(calls) == before + 1, "登录成功后应再收紧一次"
     app._on_close()

@@ -289,6 +289,10 @@ def save_config(path: Path, data: dict, merge: bool = True,
     ``merge=True``（默认）时先读旧内容再合并，避免覆盖其它键；``mode`` 非空时
     写后设置文件权限（在线挑选器的配置含凭据，用 ``0o600``）。写入失败只告警，
     不影响正在进行的操作。
+
+    **注意 ``mode`` 只在 POSIX 上构成访问控制**：Windows 的 ``os.chmod`` 只能切换
+    只读位，无法限制其它用户读取。也就是说 Windows 下"凭据受 0600 保护"并不成立，
+    实际防护取决于数据目录自身的 ACL（README「安全边界」已写明）。
     """
     path = Path(path)
     try:

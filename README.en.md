@@ -188,7 +188,12 @@ never scrolled past in the client).
 - Gentle rate limiting and FloodWait retries are built in, but avoid pulling thousands
   of messages in a burst
 - `tg_picker.session` is equivalent to your login credentials — **do not share it**;
-  keep `api_hash` private too
+  keep `api_hash` private too. Both files (plus the phone number and proxy string in
+  `config.json`) are stored **unencrypted** in the data directory: on POSIX their
+  permissions are tightened to `0600` after writing (the session file is hardened at
+  startup and after every successful sign-in). **On Windows `os.chmod` only toggles the
+  read-only bit and cannot restrict other users**, so there you rely on the data
+  directory's own ACL (e.g. choose the user directory, or restrict it to your account).
 
 ---
 
