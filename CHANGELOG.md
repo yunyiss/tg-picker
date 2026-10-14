@@ -1,5 +1,24 @@
 # 变更记录
 
+## 2026-10-14（功能：API 模式支持代理设置）
+
+### 背景
+- Telegram 在部分网络下无法直连；Telethon **不读系统 / 代理软件的全局设置**，此前只能靠 TUN 才能用 API 模式。
+
+### 修改
+- 登录表单新增**「代理」输入行**（留空 = 直连）；支持 `host:port`（默认按 socks5）、`socks5://host:port`、
+  `http://user:pass@host:port` 等写法，新增 `parse_proxy()` 解析。
+- 来源优先级：环境变量 `TG_PICKER_PROXY` > 配置里的 `proxy`；登录后自动记住、下次启动回填。
+- `Worker.login` 增加 `proxy` 参数并传给 `TelegramClient(proxy=...)`；设置了代理时日志会显示「使用代理：…」。
+- 新增语言键 `online.login.proxy`、`online.login.proxy_hint`、`online.dialog.bad_proxy`、`online.log.proxy_set`（中英同步）。
+- `requirements.txt` 增加 `PySocks`（socks5/4）与 `python-socks`（http）——代理链路所需。
+
+### 验证
+- `test_gui_online` 新增 2 条：`parse_proxy` 各写法与非法输入；非法代理时提示且不提交登录。
+- **端到端实测**：`parse_proxy("127.0.0.1:7897")` → `('socks5','127.0.0.1',7897)`，用本机会话经该代理连接
+  `is_user_authorized=True`（**未开 TUN**）。
+- `ruff` / `mypy`（6 files）全绿；`pytest` **69 passed**。
+
 ## 2026-10-14（功能：保存路径增加「打开文件夹」，并抽出公共实现）
 
 ### 现象

@@ -181,3 +181,35 @@ def test_online_open_dir_warns_when_folder_missing(tk_root, tmp_path, monkeypatc
     assert warns, "目录不存在时应弹提示"
     assert opened == [], "目录不存在时不应尝试打开"
     app._on_close()
+
+
+def test_parse_proxy_variants():
+    """代理字符串解析：socks5 / http / 带账号密码 / 省略 scheme / 非法。"""
+    assert tp.parse_proxy("") is None
+    assert tp.parse_proxy("   ") is None
+    assert tp.parse_proxy("127.0.0.1:7897") == ("socks5", "127.0.0.1", 7897)
+    assert tp.parse_proxy("socks5://127.0.0.1:7897") == ("socks5", "127.0.0.1", 7897)
+    assert tp.parse_proxy("http://127.0.0.1:10809") == ("http", "127.0.0.1", 10809)
+    assert tp.parse_proxy("socks5://u:p@127.0.0.1:7897") == (
+        "socks5", "127.0.0.1", 7897, True, "u", "p")
+    assert tp.parse_proxy("not-a-proxy") is None, "缺端口应视为非法"
+    assert tp.parse_proxy("ftp://127.0.0.1:21") is None, "不支持的协议应视为非法"
+
+
+@pytest.mark.gui
+def test_online_login_rejects_bad_proxy(tk_root, monkeypatch):
+    """代理格式非法时应提示，且不提交登录任务。"""
+    app = tp.App(tk_root)
+    app.e_api_id.insert(0, "123")
+    app.e_api_hash.insert(0, "x" * 32)
+    app.e_phone.insert(0, "+8613800000000")
+    app.e_proxy.insert(0, "not-a-proxy")
+    warns: list[str] = []
+    monkeypatch.setattr(tp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    submitted: list[str] = []
+    app.worker.submit = lambda coro, label=None: (submitted.append(label), coro.close())
+    app.on_login()
+    assert warns, "非法代理应弹提示"
+    assert submitted == [], "非法代理不应提交登录"
+    app._on_close()

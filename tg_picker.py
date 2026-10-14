@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
+from urllib.parse import unquote, urlsplit
 
 from PIL import Image, ImageTk
 from telethon import TelegramClient, errors, functions
@@ -194,6 +195,40 @@ def item_name(it: MediaItem) -> str:
     return f"{it.kind}_{date:%Y%m%d_%H%M%S}_{it.msg_id}{ext_for(it)}"
 
 
+_PROXY_KINDS = {"socks5": "socks5", "socks4": "socks4", "http": "http", "https": "http"}
+
+
+def parse_proxy(text: str) -> tuple | None:
+    """把代理字符串解析成 Telethon 的 ``proxy`` 参数；无法解析返回 ``None``。
+
+    支持 ``host:port``（默认按 socks5）、``socks5://host:port``、
+    ``http://user:pass@host:port`` 等写法。
+    """
+    text = (text or "").strip()
+    if not text:
+        return None
+    try:
+        u = urlsplit(text if "://" in text else f"socks5://{text}")
+        kind = _PROXY_KINDS.get(u.scheme.lower())
+        if kind is None or not u.hostname or not u.port:
+            return None
+    except ValueError:
+        return None
+    if u.username:
+        return (kind, u.hostname, u.port, True,
+                unquote(u.username), unquote(u.password or ""))
+    return (kind, u.hostname, u.port)
+
+
+def resolve_proxy_text() -> str:
+    """代理来源优先级：环境变量 ``TG_PICKER_PROXY`` > 配置里的 ``proxy``。"""
+    env = os.environ.get("TG_PICKER_PROXY", "").strip()
+    if env:
+        return env
+    value = load_config().get("proxy")
+    return value.strip() if isinstance(value, str) else ""
+
+
 # --------------------------------------------------------------------------
 # 后台线程：Telethon 事件循环 + 与 GUI 的队列通信
 # --------------------------------------------------------------------------
@@ -271,15 +306,17 @@ class Worker:
         self.ui_q.put(msg)
 
     # ----- 登录 -----
-    async def login(self, api_id: int, api_hash: str, phone: str) -> None:
+    async def login(self, api_id: int, api_hash: str, phone: str,
+                    proxy: tuple | None = None) -> None:
         """连接并登录；需要验证码/两步密码时经 Prompter 向界面索要。
 
+        ``proxy`` 为 Telethon 的代理参数（见 :func:`parse_proxy`）；``None`` 表示直连。
         全程响应取消：收到取消（或等待输入超时）即中止并复位忙碌态。
         """
         try:
             self.cancel.clear()          # 上一次的取消不应影响本次登录
             self.post("log", t("online.log.connecting", api_id=api_id))
-            self.client = TelegramClient(SESSION_PATH, api_id, api_hash)
+            self.client = TelegramClient(SESSION_PATH, api_id, api_hash, proxy=proxy)
             await self.client.connect()
 
             if self.cancel.is_set():
@@ -703,6 +740,14 @@ class App(LangMixin):
         self.e_phone.grid(row=1, column=5, sticky="w", padx=(4, 12))
         self.b_login = self._T(ttk.Button(f, command=self.on_login), "online.login.btn")
         self.b_login.grid(row=1, column=6, sticky="w")
+        # 代理（可留空直连）：仅走 API 时需要，配置里会记住
+        self._T(ttk.Label(f), "online.login.proxy").grid(
+            row=2, column=0, sticky="w", pady=(6, 0))
+        self.e_proxy = ttk.Entry(f, width=40)
+        self.e_proxy.grid(row=2, column=1, columnspan=4, sticky="we",
+                          padx=(4, 12), pady=(6, 0))
+        self._T(ttk.Label(f, style="Sub.TLabel"), "online.login.proxy_hint").grid(
+            row=2, column=5, columnspan=3, sticky="w", pady=(6, 0))
         self.l_login = ttk.Label(f, text=self._login_text(), style="Sub.TLabel")
         self.l_login.grid(row=1, column=7, sticky="w", padx=(10, 0))
 
@@ -817,6 +862,9 @@ class App(LangMixin):
             self.e_api_hash.insert(0, cfg["api_hash"])
         if cfg.get("phone"):
             self.e_phone.insert(0, cfg["phone"])
+        proxy = resolve_proxy_text()
+        if proxy:
+            self.e_proxy.insert(0, proxy)
 
     def on_login(self) -> None:
         """校验凭据格式后提交登录任务（首次会走验证码流程）。"""
@@ -830,8 +878,16 @@ class App(LangMixin):
         if not api_hash or not phone:
             messagebox.showwarning(_app_title(), t("online.dialog.need_hash_phone"))
             return
+        proxy_text = self.e_proxy.get().strip()
+        proxy = parse_proxy(proxy_text)
+        if proxy_text and proxy is None:
+            messagebox.showwarning(_app_title(), t("online.dialog.bad_proxy"))
+            return
+        save_config({"proxy": proxy_text})       # 记住代理设置，下次启动回填
+        if proxy:
+            self.log(t("online.log.proxy_set", proxy=proxy_text))
         self.set_busy(True)
-        self.worker.submit(self.worker.login(api_id, api_hash, phone),
+        self.worker.submit(self.worker.login(api_id, api_hash, phone, proxy=proxy),
                            label=t("online.task.login"))
 
     def on_prompt_submit(self) -> None:
