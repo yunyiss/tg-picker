@@ -12,5 +12,6 @@ telethon>=1.34,<2
 
 # 代理支持（tg_picker 可选功能：设置代理后走 socks5 / http）
 #   socks5/socks4 走 PySocks；http 走 python-socks
-PySocks>=1.7
-python-socks>=2.4
+# 与其它依赖一致加版本上界：下一个大版本可能引入不兼容改动，届时显式适配后再放开。
+PySocks>=1.7,<2
+python-socks>=2.4,<3
