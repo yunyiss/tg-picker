@@ -40,7 +40,13 @@ import ui_style
 from cache_source import MediaItem, export_one, save_items
 from i18n import t
 from ui_kit import (
+    CARD_H,
+    CARD_W,
+    CORNER,
     FONT,
+    GAP,
+    IMG_BOX,
+    THUMB,
     detect_hardware,
     gear_workers,
     human_size,
@@ -75,7 +81,6 @@ THUMB_DIR = DATA_DIR / "cache_thumbs"
 INDEX_PATH = DATA_DIR / "cache_index.json"
 VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 EXPORT_DIR = app_paths.export_dir()      # 默认导出目录：与 API 模式共用同一个
-THUMB = cs.THUMB
 
 
 def _app_title() -> str:
@@ -126,17 +131,13 @@ GEAR_KEYS = ("conservative", "balanced", "turbo")
 
 # 字体见 ui_kit（两个挑选器共用）
 
-# 网格几何：CARD_* 是卡片实际绘制尺寸，CELL_* 是含间隙的步距。
-# 两者分开，卡片之间才会露出 BG 形成缝隙。
+# 网格几何：卡片尺寸 / 间隙 / 图片方框 / 圆角均**同源**自 ui_kit（与 API 模式共用
+# 一套数值，杜绝两处漂移）；CELL_* 是含间隙的步距，与 CARD_* 分开，卡片之间才会露出 BG。
 #
 # 卡片内部纵向分配（CARD_H 必须容纳）；与 _place_cell 里的 box_y 偏移保持一致：
 #   上边距 8 + 图片方框 IMG_BOX + 间隙 6 + 信息行 ~17 + 下边距 6
-CARD_W, CARD_H = 164, 196
-GAP = 10
 CELL_W, CELL_H = CARD_W + GAP, CARD_H + GAP
 PAD = 10
-IMG_BOX = 144             # 卡片内图片方框边长
-CORNER = 9                # 卡片圆角半径
 MAX_THUMBS_IN_MEM = 600   # 内存中保留的缩略图上限
 PHOTO_BATCH_PER_TICK = 6  # 每个 UI 周期最多转换几张（避免卡顿）
 PUMP_MS = 40              # 消息队列轮询间隔（毫秒）

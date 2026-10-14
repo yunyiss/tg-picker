@@ -43,7 +43,18 @@ import i18n
 import ui_kit
 import ui_style
 from i18n import t
-from ui_kit import FONT, human_size, rounded_pts, unique_path
+from ui_kit import (
+    CARD_H,
+    CARD_W,
+    CORNER,
+    FONT,
+    GAP,
+    IMG_BOX,
+    THUMB,
+    human_size,
+    rounded_pts,
+    unique_path,
+)
 from ui_lang import LangMixin
 from ui_style import (
     ACCENT,
@@ -79,12 +90,10 @@ def _app_title() -> str:
 # 界面配色（含卡片色 CARD / CARD_HOVER / CARD_SEL）全部来自 ui_style，
 # 与缓存挑选器**共用同一套**，两模式的选中态视觉因此完全一致。
 
-THUMB = 150          # 缩略图边长
-CELL_W = 168         # 单元格宽
-CELL_H = 205         # 单元格高
-CELL_PAD = 5         # 单元格四周留白（grid 的 padx/pady）
-CORNER = 9           # 卡片圆角半径（与缓存模式一致）
-CAPTION_H = 26       # 卡片底部信息行占高（图片区在其上方居中）
+# 网格几何与缓存模式**同源**（CARD_W/H、GAP、IMG_BOX、THUMB、CORNER 均来自 ui_kit）。
+# 每个单元格就是一张卡片画布；卡片之间的间隙由 grid 的 padx/pady 各占 CELL_PAD 合成 GAP。
+CELL_W, CELL_H = CARD_W, CARD_H   # 单元格画布 = 卡片尺寸
+CELL_PAD = GAP // 2               # grid padx/pady（左右 / 上下各一份）
 SCAN_BATCH = 100     # 每次向服务器取多少条消息
 SCAN_MAX_MSGS = 6000 # 单次"加载"最多扫描多少条消息，防失控
 PUMP_MS = 80         # 消息队列轮询间隔（毫秒）
@@ -725,6 +734,7 @@ class App(LangMixin):
         self.next_offset = 0
         self.exhausted = False
         self.columns = 0
+        self._spacer_col = 0          # 上一次的右侧 spacer 列号（见 relayout）
         self._thumb_done = 0
         self._thumb_total = 0
         self._resize_job = None
@@ -1231,9 +1241,10 @@ class App(LangMixin):
     def add_item_cell(self, it: MediaItem) -> None:
         """为一条媒体创建一个单元格（自绘圆角卡片 + 缩略图 + 信息行 + 对勾徽标）。
 
-        与缓存模式**同一套画法**：卡片是 Canvas 上的**圆角多边形**（Frame 只能画
-        直角），因此圆角、底色、描边、圆形徽标、信息行格式两边完全一致。
-        每个单元格是一个固定尺寸的小 Canvas，沿用原有的 grid 布局与滚动结构。
+        几何与画法**逐项对齐缓存模式**（数值同源自 ui_kit）：卡片 164x196、圆角 9、
+        缩略图在 144 的图片方框内居中（顶部留 8px）、信息行贴卡片底部。每个单元格是
+        一个固定尺寸的小 Canvas（即卡片本身），卡片之间的间隙由 grid 的 padx/pady
+        提供——两模式的卡片尺寸、间距、缩略图大小因此完全一致。
         """
         cell = tk.Canvas(self.inner, width=CELL_W, height=CELL_H, bg=BG,
                          highlightthickness=0, bd=0)
@@ -1242,15 +1253,18 @@ class App(LangMixin):
                                       width=2, smooth=False)
         cell.coords(it.card, *rounded_pts(1, 1, CELL_W - 1, CELL_H - 1, CORNER))
 
-        img_cy = (CELL_H - CAPTION_H) // 2
-        it.img = cell.create_image(CELL_W // 2, img_cy, anchor="center")
-        it.img_txt = cell.create_text(CELL_W // 2, img_cy, anchor="center",
+        # 缩略图区：与缓存模式同一个「图片方框」（IMG_BOX），图片在其中居中
+        img_cx, img_cy = CARD_W // 2, 8 + IMG_BOX // 2
+        it.img = cell.create_image(img_cx, img_cy, anchor="center")
+        it.img_txt = cell.create_text(img_cx, img_cy, anchor="center",
                                       text=t("cell.loading"), fill=SUB,
                                       font=(FONT, 9))
-        # 信息行：与缓存模式同格式、同字号（"MM-DD HH:MM  ·  大小"）
+        # 信息行：与缓存模式同格式、同字号、同位置（贴卡片底部，按实测宽度水平居中）
         it.info = cell.create_text(
-            CELL_W // 2, CELL_H - 13, anchor="center", fill=SUB, font=(FONT, 9),
+            0, 0, anchor="nw", fill=SUB, font=(FONT, 9),
             text=f"{it.date:%m-%d %H:%M}  ·  {human_size(it.size)}")
+        bx1, _, bx2, _ = cell.bbox(it.info)
+        cell.coords(it.info, (CARD_W - (bx2 - bx1)) // 2, CARD_H - 20)
         # 选中徽标：右上角「底色外圈 + 强调色圆底 + 白勾」，与缓存模式同位置同形状
         r, ring = 11, 3
         cx, cy = CELL_W - r - 7, r + 7
@@ -1372,22 +1386,34 @@ class App(LangMixin):
                    shown=len(self.items), total=len(self.items)))
 
     def relayout(self) -> None:
-        """按画布宽度重排列数；列数未变时直接返回，避免无谓重排。
+        """按画布宽度重排列数并**居中**；列数未变时直接返回，避免无谓重排。
 
         每个单元格的实际占宽是 ``CELL_W + 2*CELL_PAD``（grid 的 padx 左右各一份）。
         早先按 ``(width-10)//CELL_W`` 算列数，漏掉了这部分间距——窗口略宽时列数偏多，
-        整行就比画布宽十几像素、**右侧溢出**（缓存模式是 Canvas 自绘、CELL_W 已含
-        间隙，所以没有这个毛病）。这里按真实步距算，并同样留出两侧 padx。
+        整行就比画布宽十几像素、**右侧溢出**。但仅修正列数后又会剩一段取整余量（最多
+        接近一整格），而 Tk 的 grid 默认左对齐 ⇒ 余量全堆在右边，看着像"右边空了一大块"。
+
+        因此这里用**两侧对称的 spacer 列**（第 0 列与第 cols+1 列各 weight=1）把余量
+        均分到左右，整块卡片随之居中——与缓存模式 ``_grid_x0`` 的居中行为一致。
+        inner 的宽度由 ``_on_canvas_resize`` 强制等于画布宽，余量正是由此分配。
         """
         width = max(self.canvas.winfo_width(), 320)
         step = CELL_W + CELL_PAD * 2
         cols = max(1, (width - CELL_PAD * 2) // step)
         if cols == self.columns:
             return
+        # 列数变化时先把**上一次的**右侧 spacer 权重清零——否则它成了内部列会把
+        # 单元格间距撑歪。记在 _spacer_col 里（而非用 self.columns 反推），是为了兼容
+        # "主动把 self.columns 置 0 以强制重排"（新一批媒体到位时 self.columns = 0）这条路径。
+        if self._spacer_col:
+            self.inner.columnconfigure(self._spacer_col, weight=0)
         self.columns = cols
+        self._spacer_col = cols + 1
+        self.inner.columnconfigure(0, weight=1)                    # 左 spacer
+        self.inner.columnconfigure(self._spacer_col, weight=1)     # 右 spacer
         for idx, it in enumerate(self.items):
             if it.cell is not None:
-                it.cell.grid(row=idx // cols, column=idx % cols,
+                it.cell.grid(row=idx // cols, column=idx % cols + 1,
                              padx=CELL_PAD, pady=CELL_PAD)
 
     def _on_canvas_resize(self, event) -> None:

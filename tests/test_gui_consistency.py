@@ -14,6 +14,7 @@ import pytest
 import cache_picker as cp
 import i18n
 import tg_picker as tp
+import ui_kit
 import ui_style
 
 TEXTUAL_CLASSES = ("TButton", "TLabel", "TCheckbutton", "Checkbutton")
@@ -132,6 +133,23 @@ def test_card_palette_is_shared():
     assert cp.CARD_HOVER == tp.CARD_HOVER == ui_style.CARD_HOVER
     assert cp.CARD_SEL == tp.CARD_SEL == ui_style.CARD_SEL
     assert cp.CORNER == tp.CORNER, "两模式卡片圆角半径应一致"
+
+
+def test_card_geometry_is_shared():
+    """两模式的卡片几何必须**同源**（尺寸 / 间隙 / 图片方框 / 缩略图 / 圆角）。
+
+    此前 API 模式自持一套尺寸（卡片 168x205、缩略图 150、无图片方框），与缓存模式
+    （164x196、140、144 方框）不一致，观感上 API 卡片偏大、缩略图偏挤。现统一由
+    ui_kit 提供，本用例防止任何一侧再写回本地字面量造成漂移。
+    """
+    assert (cp.CARD_W, cp.CARD_H) == (tp.CARD_W, tp.CARD_H) \
+        == (ui_kit.CARD_W, ui_kit.CARD_H)
+    assert cp.IMG_BOX == tp.IMG_BOX == ui_kit.IMG_BOX
+    assert cp.THUMB == tp.THUMB == ui_kit.THUMB
+    assert cp.GAP == tp.GAP == ui_kit.GAP
+    # API 的单元格画布即卡片本身；缓存模式的步距 = 卡片 + 间隙，两者步距一致
+    assert (tp.CELL_W, tp.CELL_H) == (cp.CARD_W, cp.CARD_H)
+    assert (cp.CELL_W, cp.CELL_H) == (cp.CARD_W + cp.GAP, cp.CARD_H + cp.GAP)
 
 
 @pytest.mark.gui
@@ -255,3 +273,32 @@ def test_cache_cancel_button_state_and_event(tk_root):
     app.set_busy(False)
     assert str(app.b_cancel.cget("state")) == "disabled"
     app._on_close()
+
+
+@pytest.mark.gui
+def test_online_grid_centered_with_spacer_columns(tk_root, monkeypatch):
+    """API 网格靠两侧对称 spacer 列居中（与缓存模式一致），不留右侧大块空位。
+
+    仅修正列数只解决"溢出"，取整余量还会全堆在右边；这里断言两侧各有一个 weight=1
+    的空列，且列数变小后旧的右侧 spacer 权重被清零（否则会撑歪单元格间距）。
+    """
+    i18n.set_language("zh")
+    app = tp.App(tk_root)
+    try:
+        app.columns = 0
+        monkeypatch.setattr(app.canvas, "winfo_width", lambda: 1200)
+        app.relayout()
+        wide = app.columns
+        assert wide >= 1
+        assert int(app.inner.grid_columnconfigure(0)["weight"]) == 1, "左侧应有 spacer 列"
+        assert int(app.inner.grid_columnconfigure(wide + 1)["weight"]) == 1, "右侧应有 spacer 列"
+
+        monkeypatch.setattr(app.canvas, "winfo_width", lambda: 700)
+        app.relayout()
+        narrow = app.columns
+        assert narrow < wide, "画布变窄后列数应减少"
+        assert int(app.inner.grid_columnconfigure(wide + 1)["weight"]) == 0, \
+            "旧的右侧 spacer 权重应被清零"
+        assert int(app.inner.grid_columnconfigure(narrow + 1)["weight"]) == 1
+    finally:
+        app._on_close()

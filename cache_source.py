@@ -33,7 +33,7 @@ from pathlib import Path
 from PIL import Image, ImageFile
 
 from i18n import t
-from ui_kit import LOG_NAME, unique_path
+from ui_kit import LOG_NAME, THUMB, unique_path
 
 # 缓存里可能存在"只缓存了一部分"的媒体，允许截断解码以尽量出图
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -42,7 +42,7 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 # 界面只报"成功 N / 失败 M"，逐条失败的原因必须留痕，否则用户无从排查。
 _log = logging.getLogger(LOG_NAME)
 
-THUMB = 140
+# THUMB（缩略图边长上限）与卡片几何同源，见 ui_kit——两个模式共用一套数值。
 HEAD_BYTES = 64 * 1024          # 索引阶段嗅探时解密的前缀长度
 MAX_DECRYPT_BYTES = 512 * 1024 * 1024
 
