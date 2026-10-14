@@ -286,7 +286,7 @@ class CacheApp(LangMixin):
         self._build_bottombar()
         self._build_grid()
         self._load_config()
-        self.update_count()          # 让计数/主按钮/顶栏概览在首次也在正确语言下
+        self.update_count()          # 让计数/主按钮/视图概览在首次也在正确语言下
 
         self._enable_lang_support()
 
@@ -471,16 +471,14 @@ class CacheApp(LangMixin):
         for cell in self.cell_pool:
             if cell.get("tag_txt") is not None:
                 self._canvas_cfg(cell, "tag_txt", text=t("cell.video_tag"))
-        self.update_count()                # 计数 + 主按钮 + 顶栏概览
+        self.update_count()                # 计数 + 主按钮 + 视图概览
 
     def _build_header(self) -> None:
         # padding 左缘与设置区/底栏标签对齐（同为 16）
         bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 8, 16, 4))
         bar.pack(fill="x", side="top")
-        # 语言切换放最右（不再带「语言」提示文字），其左是视图概览
+        # 语言切换独占最右（视图概览已下移到操作条第 2 行，见 _build_bottombar）
         self._build_lang_switch(bar)
-        self.l_header_stat = ttk.Label(bar, text="", style="Status.TLabel")
-        self.l_header_stat.pack(side="right")
         self._T(ttk.Label(bar, style="Title.TLabel"), "app.cache_title").pack(side="left")
         self._divider()
 
@@ -724,6 +722,11 @@ class CacheApp(LangMixin):
         self.l_count = ttk.Label(r2, text=t("common.count_none"),
                                  style="Count.TLabel", width=26)
         self.l_count.pack(side="left", padx=(0, 12))
+        # 视图概览（当前筛选下 显示 / 总数）：紧挨「已选」并排；固定宽度以免切筛选时
+        # 右侧按钮左右抖动。空列表时留空（与 API 模式同款）。
+        self.l_overview = ttk.Label(r2, text="", style="Status.TLabel",
+                                    width=18, anchor="w")
+        self.l_overview.pack(side="left", padx=(0, 12))
         self._T(ttk.Button(r2, command=self.on_select_all), "common.select_all").pack(
             side="left", padx=(0, 8))
         self._T(ttk.Button(r2, command=self.on_invert), "common.invert").pack(
@@ -1660,15 +1663,15 @@ class CacheApp(LangMixin):
         else:
             self.l_count.configure(text=t("common.count_none"))
             self.b_save.configure(text=t("cache.bottom.save_none"))
-        self._update_header()
+        self._update_overview()
 
-    def _update_header(self) -> None:
-        """顶栏右侧显示当前视图概览。"""
+    def _update_overview(self) -> None:
+        """操作条显示当前视图概览（当前筛选下 显示 / 总数）。空列表时留空。"""
         if not self.all_items:
-            self.l_header_stat.configure(text="")
+            self.l_overview.configure(text="")
             return
-        self.l_header_stat.configure(
-            text=t("cache.status.header", kind=t(f"kind.{self.v_kind.get()}"),
+        self.l_overview.configure(
+            text=t("common.view_overview", kind=t(f"kind.{self.v_kind.get()}"),
                    shown=len(self.items), total=len(self.all_items))
         )
 

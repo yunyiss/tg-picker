@@ -31,12 +31,21 @@ def _side(widget) -> str:
 
 
 def _texts(frame, side: str) -> list[str]:
-    """取该容器里指定 pack 方向、且带 text 选项的子控件文案（创建顺序）。"""
-    return [
-        str(w.cget("text"))
-        for w in frame.winfo_children()
-        if _side(w) == side and w.winfo_class() in TEXTUAL_CLASSES
-    ]
+    """取该容器里指定 pack 方向、且 text 非空的子控件文案（创建顺序）。
+
+    空文本控件（如空闲时留空的视图概览标签）不计入——否则会干扰"左侧控件顺序"断言。
+    """
+    out: list[str] = []
+    for w in frame.winfo_children():
+        if _side(w) != side or w.winfo_class() not in TEXTUAL_CLASSES:
+            continue
+        try:
+            text = str(w.cget("text"))
+        except tk.TclError:
+            continue
+        if text:
+            out.append(text)
+    return out
 
 
 def _buttons(frame, side: str) -> list:
@@ -88,6 +97,13 @@ def test_action_bar_layout_matches_between_modes(two_apps):
                   i18n.t("common.invert"), i18n.t("common.clear_sel")]
     assert _texts(c_row2, "left") == expect_sel
     assert _texts(o_row2, "left") == expect_sel
+
+    # 视图概览标签：两模式同为 Status.TLabel、同宽，且与「已选」同处操作条第 2 行
+    # （空闲时文本为空，故不计入上面的左侧文案序列）
+    for app in (cache_app, online_app):
+        assert str(app.l_overview.cget("style")) == "Status.TLabel"
+        assert int(app.l_overview.cget("width")) == 18
+        assert app.l_overview.master is app.l_count.master, "概览应与计数同一行"
 
     # 第 2 行右侧：最右为「取消」，其左为主按钮（强调样式）
     for row in (c_row2, o_row2):

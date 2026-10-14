@@ -1059,6 +1059,11 @@ class App(LangMixin):
         self.l_count = ttk.Label(r2, text=t("common.count_none"),
                                  style="Count.TLabel", width=26)
         self.l_count.pack(side="left", padx=(0, 12))
+        # 视图概览（缩略图数量）：紧挨「已选」并排，与缓存模式同一位置、同一文案。
+        # 固定宽度，避免数量变化时右侧按钮左右抖动。
+        self.l_overview = ttk.Label(r2, text="", style="Status.TLabel",
+                                    width=18, anchor="w")
+        self.l_overview.pack(side="left", padx=(0, 12))
         self._T(ttk.Button(r2, command=lambda: self.set_all(True)), "common.select_all").pack(
             side="left", padx=(0, 8))
         self._T(ttk.Button(r2, command=self.invert_all), "common.invert").pack(
@@ -1351,6 +1356,20 @@ class App(LangMixin):
         else:
             self.l_count.configure(text=t("common.count_none"))
         self.b_dl.configure(text=t("online.download_btn", n=n))
+        self._update_overview()
+
+    def _update_overview(self) -> None:
+        """操作条显示当前视图概览（已加载的缩略图数量）。
+
+        API 模式没有「筛选 / 搜索」这类会改变可见条目的操作，故「显示 / 总数」相等；
+        这里沿用与缓存模式同一文案键、同一版式，保证两模式的用户可见文本一致。
+        """
+        if not self.items:
+            self.l_overview.configure(text="")
+            return
+        self.l_overview.configure(
+            text=t("common.view_overview", kind=t("kind.all"),
+                   shown=len(self.items), total=len(self.items)))
 
     def relayout(self) -> None:
         """按画布宽度重排列数；列数未变时直接返回，避免无谓重排。
@@ -1442,6 +1461,7 @@ class App(LangMixin):
             self.add_item_cell(it)
         self.columns = 0
         self.relayout()
+        self._update_overview()          # 新一批到位后刷新缩略图数量概览
         self._thumb_total = len(items)
         self._thumb_done = 0
         self.b_more.configure(state="disabled" if exhausted else "normal")
