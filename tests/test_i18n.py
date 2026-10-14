@@ -26,6 +26,11 @@ CJK_RE = re.compile(r"[\u3000-\u303f\u4e00-\u9fff\uff00-\uffef]")
 DYNAMIC_PREFIX = ("sort.", "kind.", "gear.")
 KIND_KEYS = ("image", "video", "file", "all")
 
+# 间接消费键的调用点：键不是 t(...) 的参数，而是传给 set_status(key, **kw)
+# 这一类最容易被漏（回归：cache.status.exporting 曾只在源码里用、资源里缺失，
+# 状态栏会直接显示原始键名 "cache.status.exporting"）。
+SET_STATUS_RE = re.compile(r"\bset_status\(\s*[\"']([A-Za-z][\w.]*)[\"']")
+
 
 def _load(lang: str) -> dict:
     return json.loads((HERE / "locales" / f"{lang}.json").read_text(encoding="utf-8"))
@@ -86,6 +91,14 @@ def test_source_coverage():
                 + [f"kind.{k}" for k in KIND_KEYS]
                 + [f"gear.{k}" for k in cp.GEAR_KEYS]):
         assert key in ZH and key in EN, f"动态键缺少资源：{key}"
+
+
+def test_indirect_status_keys_exist():
+    """间接消费的键（传给 set_status 的键字符串）也必须在两份资源里存在。"""
+    text = "\n".join((HERE / s).read_text(encoding="utf-8") for s in SOURCES)
+    for key in sorted(set(SET_STATUS_RE.findall(text))):
+        assert key in ZH, f'set_status("{key}") 的键在 zh.json 缺失'
+        assert key in EN, f'set_status("{key}") 的键在 en.json 缺失'
 
 
 def test_switch_behavior():

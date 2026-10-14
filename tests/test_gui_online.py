@@ -48,7 +48,7 @@ def test_online_gui_builds_and_handles_messages(tk_root):
 
     # 语言切换：只调 set_language（不调会写偏好的 on_lang_change）
     i18n.set_language("en")
-    assert app.b_dl.cget("text") == "Download selected (1)", app.b_dl.cget("text")
+    assert app.b_dl.cget("text") == "Save selected (1)", app.b_dl.cget("text")
     assert app.l_login.cget("text") == i18n.t("online.login.not_logged")
     i18n.set_language("zh")
     assert app.b_dl.cget("text") == i18n.t("online.download_btn", n=1)

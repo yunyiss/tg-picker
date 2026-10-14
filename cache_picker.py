@@ -796,7 +796,7 @@ class CacheApp(LangMixin):
             side="left", padx=(0, 8))
         self._T(ttk.Button(r1, command=self.on_invert), "common.invert").pack(
             side="left", padx=(0, 8))
-        self._T(ttk.Button(r1, command=self.on_clear_sel), "common.clear").pack(side="left")
+        self._T(ttk.Button(r1, command=self.on_clear_sel), "common.clear_sel").pack(side="left")
 
         self.v_bydate = tk.BooleanVar(value=False)
         self._T(ttk.Checkbutton(r1, variable=self.v_bydate),

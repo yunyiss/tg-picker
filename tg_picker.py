@@ -570,7 +570,8 @@ class Worker:
                 if self.cancel.is_set():
                     self.post("log", t("online.log.dl_cancel", ok=ok, left=total - idx + 1))
                     break
-                self.post("progress", idx - 1, total)
+                name = item_name(it)
+                self.post("progress", idx - 1, total, name)
                 try:
                     path = await self._download_one(it, out_dir)
                     ok += 1
@@ -584,7 +585,7 @@ class Worker:
                     fail += 1
                     self.post("log", t("online.log.dl_item_err", idx=idx, total=total,
                                        name=exc.__class__.__name__, exc=exc))
-                self.post("progress", idx, total)
+                self.post("progress", idx, total, name)
                 await asyncio.sleep(0.35)  # 温和控速，避免触发限流
             self.post("log", t("online.log.dl_done", ok=ok, fail=fail))
             self.post("download_done", out_dir, ok, fail)
@@ -1259,9 +1260,9 @@ class App(LangMixin):
 
     def _msg_progress(self, msg: tuple) -> None:
         """下载进度：更新进度条与状态栏。"""
-        _, done, total = msg
+        _, done, total, name = msg
         self.pb.configure(value=(done / total * 100) if total else 0)
-        self.set_status("online.status.downloading", done=done, total=total)
+        self.set_status("online.status.downloading", done=done, total=total, name=name)
 
     def _msg_download_done(self, msg: tuple) -> None:
         """下载完成：提示结果。"""
