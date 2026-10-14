@@ -1,5 +1,33 @@
 # 变更记录
 
+## 2026-10-14（修复：CI 的 Linux 一路从建立起就一直红——mypy 报 Windows 专有属性）
+
+### 现象
+- GitHub Actions 的 CI **从第一次运行（`368530d`）起，ubuntu-latest 一路始终失败**，Windows 一路正常；
+  失败步骤是 **mypy**，报 `cache_source.py:79: error: Module has no attribute "STARTUPINFO"`（另有 2 条同类）。
+
+### 原因
+- mypy 是按**当前平台**做类型检查的：`subprocess.STARTUPINFO` / `CREATE_NO_WINDOW` /
+  `STARTF_USESHOWWINDOW` / `SW_HIDE` 在 typeshed 里**只在 win32 下定义**。
+- `cache_source.py` 原来把"有没有这个属性"用 `hasattr` 存成模块常量、运行时再判断——
+  mypy 无法据此缩小类型，于是在 Linux 上直接按"subprocess 模块没有该属性"报错。
+  Windows 侧属性存在，所以本地与 Windows CI 一直是绿的。
+
+### 修改
+- `_hidden_subprocess_kwargs()` 改为 `sys.platform != "win32"` 提前返回：非 Windows 平台整个分支
+  都会被 mypy 跳过（与 `ui_kit.open_folder` 里 `os.startfile` 的既有写法同一套路）。
+  删除因此不再需要的 `_NO_WINDOW_FLAGS` / `_HAS_STARTUPINFO` 两个模块常量。
+- Windows 运行时行为**不变**：仍传 `creationflags=CREATE_NO_WINDOW` + `STARTUPINFO(SW_HIDE)`，
+  ffmpeg 子进程照旧不弹控制台窗口。
+
+### 验证
+- 本机复现 CI 平台：`mypy --platform linux` 修前 **3 errors** → 修后 **Success**；Windows 侧 `mypy` 仍 Success。
+- 运行时自检：Windows 下 `_hidden_subprocess_kwargs()` 仍返回两项且取值正确。
+- `ruff` 全绿；`pytest` **84 passed**（CI 门禁子集 `-m "not gui"` 47 passed）。
+
+> 经验：本地（Windows）跑 mypy 看不到 Linux 侧的问题。改动涉及平台分支时，
+> 顺手跑一次 `python -m mypy --platform linux` 即可提前发现（CI 的矩阵已能覆盖两个平台）。
+
 ## 2026-10-14（UI：压缩上下面板留白，让缩略图网格区更高）
 
 ### 背景

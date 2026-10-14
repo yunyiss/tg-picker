@@ -60,27 +60,25 @@ _FFMPEG_CACHE: str | None = None
 # Windows：GUI 通过 pythonw.exe（无控制台）启动时，每次调用 ffmpeg.exe
 # 这类控制台程序，系统都会为它**新建一个控制台窗口**并闪一下。缩略图是
 # 边滚动边生成的，于是表现为"加载时不断弹窗"。必须显式要求不创建窗口。
-_NO_WINDOW_FLAGS = (
-    getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) if sys.platform == "win32" else 0
-)
-_HAS_STARTUPINFO = hasattr(subprocess, "STARTUPINFO")
-
-
 def _hidden_subprocess_kwargs() -> dict:
     """返回让子进程不弹控制台窗口的 subprocess 参数（仅 Windows 生效）。
+
+    用 ``sys.platform`` 做分支（而不是把 ``hasattr`` 的结果存成模块常量）：
+    ``STARTUPINFO`` / ``CREATE_NO_WINDOW`` 这些属性在 typeshed 里只在 win32
+    下定义，写成"运行时才判断"的形式会让 mypy 在 Linux/macOS 上按当前平台
+    报 ``Module has no attribute``（CI 的 Linux 一路因此一直红）。写成平台
+    分支后，非 Windows 平台整个分支都会被 mypy 跳过——与 ``ui_kit.open_folder``
+    里 ``os.startfile`` 的处理方式一致。
 
     每次调用都新建 STARTUPINFO：抽帧由多线程并发发起，
     复用同一个对象不安全（同时被多个 CreateProcess 读取）。
     """
-    kwargs: dict = {}
-    if _NO_WINDOW_FLAGS:
-        kwargs["creationflags"] = _NO_WINDOW_FLAGS
-    if _HAS_STARTUPINFO:
-        si = subprocess.STARTUPINFO()
-        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        si.wShowWindow = subprocess.SW_HIDE
-        kwargs["startupinfo"] = si
-    return kwargs
+    if sys.platform != "win32":
+        return {}
+    si = subprocess.STARTUPINFO()
+    si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    si.wShowWindow = subprocess.SW_HIDE
+    return {"creationflags": subprocess.CREATE_NO_WINDOW, "startupinfo": si}
 
 
 def _bundled_ffmpeg() -> str:
