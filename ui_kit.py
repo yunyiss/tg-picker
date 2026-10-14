@@ -23,8 +23,16 @@ from pathlib import Path
 
 from i18n import t
 
-# 界面字体：两个 GUI 原先把同一字面量各写一遍，这里收敛为一处
-FONT = "Microsoft YaHei UI"
+# 界面字体：两个 GUI 原先把同一字面量各写一遍，这里收敛为一处。
+# release 产出 Windows / macOS / Linux 三平台包，而 "Microsoft YaHei UI" 只存在于
+# Windows——在非 Windows 上会被 Tk 回退成默认字体，观感与设计不符。故按平台各给一个
+# 存在率高、气质接近的 CJK 字族；若该平台仍缺此字体，Tk 自身会再回退默认字体。
+if sys.platform == "win32":
+    FONT = "Microsoft YaHei UI"
+elif sys.platform == "darwin":
+    FONT = "PingFang SC"
+else:
+    FONT = "Noto Sans CJK SC"
 
 
 def human_size(n: int | None) -> str:

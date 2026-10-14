@@ -12,6 +12,13 @@
 - **验证**：`ruff` / `mypy` 全绿；`pytest` 全量通过（`test_firstrun.py` 的对话框用例带 `gui`
   标记，本机有显示器、会真实建窗）。
 
+### M7 · 界面字体写死为 Windows 专有字族（跨平台）
+- **现象**：`ui_kit.FONT` 写死 `"Microsoft YaHei UI"`，而 release 会产出 Windows / macOS / Linux
+  **三平台包**；非 Windows 上该字族不存在，Tk 会回退默认字体，观感与设计不符。
+- **修改**：按平台各给一个存在率高、气质接近的 CJK 字族——Windows 雅黑 / macOS 苹方 /
+  其余（Linux）Noto Sans CJK；若该平台仍缺此字体，Tk 自身再回退默认字体，不会报错。
+- **验证**：`ruff` / `mypy` 全绿；`pytest` 全量通过（字体仅在 Tk 建窗时使用，逻辑无分支变化）。
+
 ## 2026-10-14（交付前审查修复·第三批：缩略图并发 + 领域逻辑收敛）
 
 ### M4 · 在线模式缩略图抓取退化为串行（性能）
