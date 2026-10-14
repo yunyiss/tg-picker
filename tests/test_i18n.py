@@ -101,6 +101,28 @@ def test_indirect_status_keys_exist():
         assert key in EN, f'set_status("{key}") 的键在 en.json 缺失'
 
 
+# 同一功能在两模式下必须文案一致（用户可见层要"像同一个工具的不同模式"）
+CROSS_MODE_EQUIVALENT = (
+    ("cache.bottom.save_n", "online.download_btn"),                   # 主按钮
+    ("cache.status.save_done", "online.status.done"),                 # 完成反馈
+    ("cache.status.saving", "online.status.downloading"),             # 进行中
+    ("cache.dialog.confirm_export", "online.dialog.confirm_save"),    # 单条确认弹窗
+    ("cache.dialog.nothing_selected", "online.dialog.nothing_selected"),
+    ("cache.dialog.no_out_dir", "online.dialog.no_out_dir"),
+)
+
+
+def test_cross_mode_wording_is_identical():
+    """同一功能在两模式下的文案取值必须完全一致（含占位符）。"""
+    for cache_key, online_key in CROSS_MODE_EQUIVALENT:
+        assert ZH[cache_key] == ZH[online_key], (
+            f"中文文案不一致：{cache_key}={ZH[cache_key]!r} vs {online_key}={ZH[online_key]!r}"
+        )
+        assert EN[cache_key] == EN[online_key], (
+            f"英文文案不一致：{cache_key}={EN[cache_key]!r} vs {online_key}={EN[online_key]!r}"
+        )
+
+
 def test_switch_behavior():
     """切换语言：通知次数、取值、未知码回退、缺失键兜底。"""
     calls: list[int] = []

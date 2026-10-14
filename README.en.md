@@ -110,7 +110,7 @@ bulk-export with another tool first.
    only and only jpg comes out. Index records and thumbnails already known for other
    formats are **kept**, so switching back to All never re-scans (still sub-second); click
    **Clear cache** to reclaim that disk space.
-   The **Export** dropdown (All / Images / Videos) sets what is previewed and exported.
+   The **Save content** dropdown (All / Images / Videos) sets what is previewed and saved.
    The **Performance** gear (Conservative 1 thread / Balanced recommended / Turbo all
    cores) sets the **concurrency for both the scan and the thumbnails** and is auto-matched
    to this machine's hardware on launch (low-spec devices are clamped so it never
@@ -122,7 +122,7 @@ bulk-export with another tool first.
 5. Pick from the thumbnail wall:
    - **Click** to select (turns blue with a check); click again to deselect
    - **Shift + click** to select a range
-   - **Double-click** to **export** that item into the "Save to" folder (it asks for
+   - **Double-click** to **save** that item into the "Save to" folder (it asks for
      confirmation first; the full path then appears in the status bar)
    - **Ctrl+A** selects all current results / **Esc** clears the selection
 6. Choose the **Save to** folder (you can click **Open folder** to open it in the file
@@ -148,7 +148,7 @@ bulk-export with another tool first.
   everything again)
 - When the thumbnail cache grows too large, click **Clear cache**: it deletes only the
   thumbnails, index and frame temp files (and reports how much was freed); they are
-  rebuilt automatically. **Your tdata and any media you exported are untouched.**
+  rebuilt automatically. **Your tdata and any media you saved are untouched.**
 
 ---
 
@@ -178,8 +178,8 @@ never scrolled past in the client).
    verification asks for the password as well)
 3. Enter the group/channel (`@username`, a `t.me` link, an invite link, or a numeric ID)
    → **Load media**
-4. Click to select / **double-click = download that one now** (the path appears in the
-   log below) → **Download selected**
+4. Click to select / **double-click = confirm, then save that one** (the path appears in the
+   log below) → **Save selected**
 
 ### Notes
 

@@ -414,10 +414,6 @@ class CacheApp(LangMixin):
         st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
         st.configure("Count.TLabel", background=PANEL, foreground=ACCENT,
                      font=(FONT, 10, "bold"))
-        # 筛选栏上的文字（背景是 BAR 而非 PANEL）
-        st.configure("BarField.TLabel", background=BAR, foreground=SUB, font=(FONT, 9))
-        st.configure("BarSection.TLabel", background=BAR, foreground=FG,
-                     font=(FONT, 11, "bold"))
         st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
         # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
         st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
@@ -482,7 +478,7 @@ class CacheApp(LangMixin):
 
     @staticmethod
     def _style_checkbuttons(st: ttk.Style) -> None:
-        """复选框（面板底与筛选栏底各一套）。
+        """复选框。
 
         关键：clam 的 Checkbutton.indicator 用的是
         upperbordercolor / lowerbordercolor（不是 bordercolor/lightcolor/darkcolor）
@@ -495,18 +491,6 @@ class CacheApp(LangMixin):
                      indicatorsize=13)
         st.map("TCheckbutton",
                background=[("active", PANEL)],
-               foreground=[("active", FG)],
-               indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
-               indicatorforeground=[("selected", "#ffffff")],
-               upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
-               lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
-        st.configure("Bar.TCheckbutton", background=BAR, foreground=FG,
-                     font=(FONT, 9), focusthickness=0, focuscolor=BAR,
-                     indicatorbackground=FIELD, indicatorforeground=ACCENT,
-                     upperbordercolor=BORDER, lowerbordercolor=BORDER,
-                     indicatorsize=13)
-        st.map("Bar.TCheckbutton",
-               background=[("active", BAR)],
                foreground=[("active", FG)],
                indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
                indicatorforeground=[("selected", "#ffffff")],
@@ -646,20 +630,20 @@ class CacheApp(LangMixin):
             var.trace_add("write", self._sync_all_state)   # 单个变更 → 同步全选框
         self._divider()
 
-    # ---------- 筛选栏（独立一档背景）----------
+    # ---------- 筛选栏 ----------
     def _build_toolbar(self) -> None:
-        wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 10, 16, 10))
+        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 10, 16, 10))
         wrap.pack(fill="x", side="top")
-        # 分区标题（编号风格与另一模式一致；本区底为 BAR，故用 BarSection 变体）
-        self._T(ttk.Label(wrap, style="BarSection.TLabel"),
+        # 分区标题：与 API 模式同款（Section.TLabel / ① ② 编号）
+        self._T(ttk.Label(wrap, style="Section.TLabel"),
                 "cache.toolbar.title").pack(anchor="w", pady=(0, 8))
 
-        row = ttk.Frame(wrap, style="Bar.TFrame")
+        row = ttk.Frame(wrap, style="Panel.TFrame")
         row.pack(fill="x")
 
         # 导出内容：下拉（内部键 all/image/video，文案随语言变化）。
         # 决定**预览显示与导出**的范围（扫描范围由上面的「输出类型」复选决定）。
-        self._T(ttk.Label(row, style="BarField.TLabel"),
+        self._T(ttk.Label(row, style="Sub.TLabel"),
                 "cache.toolbar.export_label").pack(side="left")
         self.v_kind = tk.StringVar(value="all")
         self.cb_kind = ttk.Combobox(row, width=10, state="readonly",
@@ -668,7 +652,7 @@ class CacheApp(LangMixin):
         self.cb_kind.pack(side="left", padx=(8, 20))
         self.cb_kind.bind("<<ComboboxSelected>>", lambda e: self.on_kind_change())
 
-        self._T(ttk.Label(row, style="BarField.TLabel"),
+        self._T(ttk.Label(row, style="Sub.TLabel"),
                 "cache.toolbar.sort_label").pack(side="left")
         # 排序用**内部键**驱动逻辑，下拉里显示的是随语言变化的文案
         self.v_sort = tk.StringVar(value="date_desc")
@@ -681,7 +665,7 @@ class CacheApp(LangMixin):
         self.cb_sort.bind("<<ComboboxSelected>>", lambda e: self.on_sort_change())
 
         # 性能档位：下拉，控制后台缩略图工作线程数（内部键 conservative/balanced/turbo）
-        self._T(ttk.Label(row, style="BarField.TLabel"),
+        self._T(ttk.Label(row, style="Sub.TLabel"),
                 "cache.toolbar.gear_label").pack(side="left")
         self.v_gear = tk.StringVar(value="balanced")
         self.cb_gear = ttk.Combobox(row, width=16, state="readonly",
@@ -696,7 +680,7 @@ class CacheApp(LangMixin):
         self.e_search = ttk.Entry(row, width=22)
         self.e_search.pack(side="right", padx=(8, 8))
         self.e_search.bind("<KeyRelease>", self._on_search_key)
-        self._T(ttk.Label(row, style="BarField.TLabel"),
+        self._T(ttk.Label(row, style="Sub.TLabel"),
                 "cache.toolbar.search_label").pack(side="right")
 
     # ---------- 性能档位 ----------
