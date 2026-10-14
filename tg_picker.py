@@ -811,7 +811,7 @@ class App(LangMixin):
 
     def _build_langbar(self) -> None:
         """顶部标题栏：左侧模式标题，右侧语言切换（与缓存模式同一版式）。"""
-        bar = ttk.Frame(self.root, padding=(16, 12, 16, 8), style="Panel.TFrame")
+        bar = ttk.Frame(self.root, padding=(16, 8, 16, 4), style="Panel.TFrame")
         bar.pack(fill="x")
         self._build_lang_switch(bar, with_label=True)
         self._T(ttk.Label(bar, style="Title.TLabel"), "app.online_title").pack(side="left")
@@ -839,11 +839,11 @@ class App(LangMixin):
         会把 `api_hash` 所在列一起撑宽，凭空留出一块空白。每行末尾留弹性空列
         吸收多余宽度，窄窗口下也不挤压控件。
         """
-        f = ttk.Frame(self.root, padding=(16, 10, 16, 8), style="Panel.TFrame")
+        f = ttk.Frame(self.root, padding=(16, 6, 16, 4), style="Panel.TFrame")
         f.pack(fill="x")
         self._login_frame = f            # 验证码行要插在它下面
         self._T(ttk.Label(f, style="Section.TLabel"), "online.login.title").pack(
-            anchor="w", pady=(0, 8))
+            anchor="w", pady=(0, 6))
 
         # 第 1 行：凭据 + 登录按钮 + 登录状态。**独立子栅格**：不与代理行共列，
         # 避免被下面那行的长提示撑开而留下大空白。
@@ -869,7 +869,7 @@ class App(LangMixin):
 
         # 第 2 行：代理（紧凑）+ 小字提示（同样独立，互不影响列宽）
         r2 = ttk.Frame(f, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(8, 0))
+        r2.pack(fill="x", pady=(6, 0))
         self._T(ttk.Label(r2, style="Sub.TLabel"),
                 "online.login.proxy").grid(row=0, column=0, sticky="w")
         self.e_proxy = ttk.Entry(r2, width=24)
@@ -879,7 +879,7 @@ class App(LangMixin):
         r2.columnconfigure(3, weight=1)
 
         # 验证码/密码输入行（默认隐藏，收到后台请求时显示）
-        self.pf = ttk.Frame(self.root, padding=(16, 0, 16, 6), style="Panel.TFrame")
+        self.pf = ttk.Frame(self.root, padding=(16, 0, 16, 4), style="Panel.TFrame")
         self._T(ttk.Label(self.pf, style="Sub.TLabel"),
                 "online.login.code_label").grid(row=0, column=0, sticky="w")
         self.e_prompt = ttk.Entry(self.pf, width=28, show="")
@@ -893,10 +893,10 @@ class App(LangMixin):
         self._divider()
 
     def _build_chat(self) -> None:
-        f = ttk.Frame(self.root, padding=(16, 8, 16, 8), style="Panel.TFrame")
+        f = ttk.Frame(self.root, padding=(16, 6, 16, 6), style="Panel.TFrame")
         f.pack(fill="x")
         self._T(ttk.Label(f, style="Section.TLabel"), "online.chat.title").grid(
-            row=0, column=0, columnspan=10, sticky="w", pady=(0, 8))
+            row=0, column=0, columnspan=10, sticky="w", pady=(0, 6))
         self._T(ttk.Label(f, style="Sub.TLabel"),
                 "online.chat.chat_label").grid(row=1, column=0, sticky="w")
         self.e_chat = ttk.Entry(f, width=42)
@@ -928,7 +928,7 @@ class App(LangMixin):
         f.columnconfigure(1, weight=1)
 
     def _build_grid(self) -> None:
-        wrap = ttk.Frame(self.root, padding=(16, 10, 8, 10))
+        wrap = ttk.Frame(self.root, padding=(16, 6, 8, 6))
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
         vbar = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
@@ -967,7 +967,7 @@ class App(LangMixin):
         第 1 行 = 保存到 + 输入框 + 浏览 + 打开目录；
         第 2 行 = 全选/反选/清除选择（左）+ 主按钮/取消（右）。
         """
-        f = ttk.Frame(self.root, padding=(16, 8, 16, 8), style="Panel.TFrame")
+        f = ttk.Frame(self.root, padding=(16, 6, 16, 6), style="Panel.TFrame")
         f.pack(fill="x")
 
         # 第 1 行：保存目标
@@ -984,7 +984,7 @@ class App(LangMixin):
 
         # 第 2 行：计数 + 选择操作（左）+ 主按钮 / 取消（右）
         r2 = ttk.Frame(f, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(10, 0))
+        r2.pack(fill="x", pady=(8, 0))
         # l_count / b_dl 的文本由 update_count() 拥有，故用 t() 设初值但不登记
         self.l_count = ttk.Label(r2, text=t("common.count_none"),
                                  style="Count.TLabel", width=26)
@@ -1004,7 +1004,7 @@ class App(LangMixin):
         self.b_dl.pack(side="right", padx=(0, 8))
 
         # 进度条在左、状态在右（与缓存模式一致）
-        f2 = ttk.Frame(self.root, padding=(16, 4, 16, 8), style="Bar.TFrame")
+        f2 = ttk.Frame(self.root, padding=(16, 4, 16, 6), style="Bar.TFrame")
         f2.pack(fill="x")
         self.l_status = ttk.Label(f2, text=t("common.ready"), style="BarStatus.TLabel")
         self.l_status.pack(side="right")
@@ -1012,9 +1012,10 @@ class App(LangMixin):
         self.pb.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
     def _build_log(self) -> None:
-        f = ttk.Frame(self.root, padding=(16, 0, 16, 10))
+        f = ttk.Frame(self.root, padding=(16, 0, 16, 6))
         f.pack(fill="both")
-        self.txt = tk.Text(f, height=7, bg="#14141a", fg=SUB, insertbackground=FG,
+        # 日志区只占必要高度（默认 4 行，可滚动）——把纵向空间尽量让给缩略图网格
+        self.txt = tk.Text(f, height=4, bg="#14141a", fg=SUB, insertbackground=FG,
                            relief="flat", font=("Consolas", 9), wrap="none")
         sb = ttk.Scrollbar(f, orient="vertical", command=self.txt.yview)
         self.txt.configure(yscrollcommand=sb.set, state="disabled")

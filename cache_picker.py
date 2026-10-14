@@ -554,7 +554,7 @@ class CacheApp(LangMixin):
 
     def _build_header(self) -> None:
         # padding 左缘与设置区/底栏标签对齐（同为 16）
-        bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 12, 16, 12))
+        bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 8, 16, 4))
         bar.pack(fill="x", side="top")
         # 语言切换放最右（带「语言」标签，与 API 模式一致），其左是视图概览
         self._build_lang_switch(bar, with_label=True)
@@ -565,11 +565,11 @@ class CacheApp(LangMixin):
 
     # ---------- 数据源设置 ----------
     def _build_setup(self) -> None:
-        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 14, 16, 14))
+        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 8, 16, 6))
         wrap.pack(fill="x", side="top")
         # 分区标题：与 API 模式的「① 登录」「② 选择聊天与筛选」同款、同编号风格
         self._T(ttk.Label(wrap, style="Section.TLabel"), "cache.setup.title").pack(
-            anchor="w", pady=(0, 8))
+            anchor="w", pady=(0, 6))
 
         # 第一行：数据源 + 主操作（统一 8px 间距节奏）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
@@ -586,7 +586,7 @@ class CacheApp(LangMixin):
 
         # 第二行：可选密码 + 只读提示（提示只在此处出现一次）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(10, 0))
+        r2.pack(fill="x", pady=(8, 0))
         self._T(ttk.Label(r2, style="Field.TLabel", width=14),
                 "cache.setup.passcode_label").pack(side="left")
         self.e_pass = ttk.Entry(r2, width=16, show="*")
@@ -603,7 +603,7 @@ class CacheApp(LangMixin):
         # 第三行：输出类型（**扫描格式**）——9 个勾选框，默认全勾（与上游一致）。
         # 未勾选的格式在扫描时被早停跳过，不参与解密/缩略图，也不会出现在网格里。
         r3 = ttk.Frame(wrap, style="Panel.TFrame")
-        r3.pack(fill="x", pady=(10, 0))
+        r3.pack(fill="x", pady=(8, 0))
         self._T(ttk.Label(r3, style="Field.TLabel", width=14),
                 "cache.setup.formats_label").pack(side="left", anchor="n")
         # 「全选」框：三态显示（全选 "1" / 半选 "" / 全不选 "0"），随各格式勾选实时同步。
@@ -633,11 +633,11 @@ class CacheApp(LangMixin):
 
     # ---------- 筛选栏 ----------
     def _build_toolbar(self) -> None:
-        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 10, 16, 10))
+        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 6, 16, 6))
         wrap.pack(fill="x", side="top")
         # 分区标题：与 API 模式同款（Section.TLabel / ① ② 编号）
         self._T(ttk.Label(wrap, style="Section.TLabel"),
-                "cache.toolbar.title").pack(anchor="w", pady=(0, 8))
+                "cache.toolbar.title").pack(anchor="w", pady=(0, 6))
 
         row = ttk.Frame(wrap, style="Panel.TFrame")
         row.pack(fill="x")
@@ -779,7 +779,7 @@ class CacheApp(LangMixin):
 
     # ---------- 底部操作条 ----------
     def _build_bottombar(self) -> None:
-        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 12, 16, 12))
+        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 8, 16, 8))
         wrap.pack(fill="x", side="bottom")
 
         # 第一行：保存目标（与 API 模式操作条第 1 行同一版式）
@@ -798,7 +798,7 @@ class CacheApp(LangMixin):
 
         # 第二行：计数 + 选择操作（左）｜按日期分文件夹 + 主按钮 + 取消（右）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(10, 0))
+        r2.pack(fill="x", pady=(8, 0))
         # l_count / b_save 的文本由 update_count() 拥有，故用 t() 设初值但不登记
         self.l_count = ttk.Label(r2, text=t("common.count_none"),
                                  style="Count.TLabel", width=26)
@@ -820,7 +820,7 @@ class CacheApp(LangMixin):
                 "cache.bottom.bydate").pack(side="right", padx=(0, 16))
 
     def _build_grid(self) -> None:
-        wrap = ttk.Frame(self.root, padding=(16, 10, 8, 10))
+        wrap = ttk.Frame(self.root, padding=(16, 6, 8, 6))
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
         vbar = ttk.Scrollbar(wrap, orient="vertical", command=self._on_scrollbar)
@@ -857,7 +857,7 @@ class CacheApp(LangMixin):
 
     def _build_statusbar(self) -> None:
         # 状态栏底色与 API 模式一致（BAR）；状态在右、进度在左
-        wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 7, 16, 7))
+        wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 5, 16, 5))
         wrap.pack(fill="x", side="bottom")
         self.l_status = ttk.Label(wrap, text=t("common.ready"), style="BarStatus.TLabel")
         self.l_status.pack(side="right")
