@@ -72,7 +72,6 @@
   "cache.bottom.open_dir": "打开目录",
   "cache.bottom.save_none": "保存选中",
   "cache.bottom.save_n": "保存选中（{n}）",
-  "cache.default_out_dir": "picked",
 
   "cache.status.default": "缩略图已载入 {n}　·　单击选中，Shift+单击连选，双击预览",
   "cache.status.load_done": "读取完成：媒体 {ok} 个{reused}　·　跳过 {skipped}　·　失败 {failed}　·　耗时 {elapsed}s",

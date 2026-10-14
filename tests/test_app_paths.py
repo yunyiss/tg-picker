@@ -74,3 +74,19 @@ def test_saved_mode_ignores_invalid_content(tmp_path, monkeypatch):
     monkeypatch.setattr(app_paths, "program_dir", lambda: tmp_path)
     (tmp_path / "app_location.json").write_text("not json", encoding="utf-8")
     assert app_paths.saved_mode() is None
+
+
+def test_export_dir_helper_lives_under_data_dir(tmp_path, monkeypatch):
+    """export_dir() = 数据目录 / exports（固定名，不走 i18n）。"""
+    monkeypatch.setenv("TG_PICKER_DATA_DIR", str(tmp_path / "d"))
+    assert app_paths.export_dir() == tmp_path / "d" / app_paths.EXPORT_SUBDIR
+
+
+def test_both_modes_share_default_export_dir():
+    """API 与缓存模式解析出的默认导出目录必须**同一个**。"""
+    import cache_picker as cp
+    import tg_picker as tp
+
+    assert cp.EXPORT_DIR == tp.DEFAULT_OUT, "两个模式的默认保存目录必须一致"
+    assert cp.EXPORT_DIR.name == app_paths.EXPORT_SUBDIR
+    assert cp.EXPORT_DIR.parent == app_paths.data_dir()

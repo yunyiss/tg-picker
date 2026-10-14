@@ -50,7 +50,7 @@ APP_DIR = Path(__file__).resolve().parent
 DATA_DIR = app_paths.data_dir()
 CONFIG_PATH = DATA_DIR / "config.json"
 SESSION_PATH = str(DATA_DIR / "tg_picker_session")
-DEFAULT_OUT = DATA_DIR / "downloads"
+DEFAULT_OUT = app_paths.export_dir()   # 与缓存模式共用同一个默认导出目录
 
 
 def _app_title() -> str:

@@ -57,6 +57,7 @@ CONFIG_PATH = DATA_DIR / "cache_config.json"
 THUMB_DIR = DATA_DIR / "cache_thumbs"
 INDEX_PATH = DATA_DIR / "cache_index.json"
 VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
+EXPORT_DIR = app_paths.export_dir()      # 默认导出目录：与 API 模式共用同一个
 THUMB = cs.THUMB
 
 
@@ -921,7 +922,7 @@ class CacheApp(LangMixin):
         self.e_tdata.delete(0, "end")
         self.e_tdata.insert(0, tdata)
 
-        out = cfg.get("out_dir") or str(HERE / t("cache.default_out_dir"))
+        out = cfg.get("out_dir") or str(EXPORT_DIR)
         self.e_out.delete(0, "end")
         self.e_out.insert(0, out)
         if cfg.get("kind") in KIND_VALUES:
@@ -1734,7 +1735,7 @@ class CacheApp(LangMixin):
         路径不存在时提示先选目录；启动外部程序失败（本机可能对 shell open 受限）
         时不弹错，回退为把**绝对路径写入剪贴板**并在状态栏提示，保证不崩、可用。
         """
-        path = Path(self.e_out.get().strip() or str(HERE / t("cache.default_out_dir")))
+        path = Path(self.e_out.get().strip() or str(EXPORT_DIR))
         if not path.is_dir():
             messagebox.showwarning(_app_title(), t("cache.dialog.no_out_dir"))
             return

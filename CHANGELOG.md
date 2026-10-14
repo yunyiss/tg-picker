@@ -1,5 +1,21 @@
 # 变更记录
 
+## 2026-10-14（修复：统一 API / 缓存模式的默认保存目录）
+
+### 现象
+- API 模式与缓存模式的默认保存目录不一致（前者 `data/downloads`，后者 `程序目录/<本地化名>`）。
+
+### 修改
+- 默认导出目录统一为**数据目录下的 `exports/`**：新增 `app_paths.EXPORT_SUBDIR` 与
+  `app_paths.export_dir()`；`tg_picker.DEFAULT_OUT` 与 `cache_picker.EXPORT_DIR` 改指同一目录。
+- 目录名固定 `exports`、不再走 i18n（原缓存默认名随语言变化，中英文会生成不同文件夹）；
+  删除随之不再使用的语言键 `cache.default_out_dir`（中英同步）。
+- 仍优先使用配置里记住的 `out_dir`：用户上次手动选过的目录不受影响。
+
+### 验证
+- `test_app_paths` 新增 2 条：`export_dir()` 位于数据目录下且名为 `exports`；两个模式的默认导出目录必须一致。
+- `ruff` / `mypy`（6 files）全绿；`pytest` **64 passed**。
+
 ## 2026-10-14（调整：数据位置选择并入启动器窗口 + 位置提示）
 
 ### 修改

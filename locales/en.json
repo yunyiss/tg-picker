@@ -72,7 +72,6 @@
   "cache.bottom.open_dir": "Open folder",
   "cache.bottom.save_none": "Save selected",
   "cache.bottom.save_n": "Save selected ({n})",
-  "cache.default_out_dir": "picked",
 
   "cache.status.default": "Thumbnails loaded {n} · click to select, Shift+click for range, double-click to preview",
   "cache.status.load_done": "Loaded {ok} media{reused} · skipped {skipped} · failed {failed} · {elapsed}s",

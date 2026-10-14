@@ -24,6 +24,7 @@ from pathlib import Path
 APP_NAME = "tg-picker"
 MARKER_NAME = "app_location.json"
 PORTABLE_SUBDIR = "data"
+EXPORT_SUBDIR = "exports"   # 默认导出目录：API / 缓存两个挑选器共用同一个
 ENV_VAR = "TG_PICKER_DATA_DIR"
 
 PORTABLE = "portable"
@@ -130,6 +131,14 @@ def data_dir() -> Path:
         ensure_resolved()
     assert _DIR is not None
     return _DIR
+
+
+def export_dir() -> Path:
+    """默认导出目录：API 与缓存两个挑选器共用**同一个**目录。
+
+    目录名固定为 ``exports``（不走 i18n），避免中英文界面生成不同文件夹。
+    """
+    return data_dir() / EXPORT_SUBDIR
 
 
 def needs_choice() -> bool:
