@@ -82,6 +82,7 @@ def _app_title() -> str:
 THUMB = 150          # 缩略图边长
 CELL_W = 168         # 单元格宽
 CELL_H = 205         # 单元格高
+CELL_PAD = 5         # 单元格四周留白（grid 的 padx/pady）
 CORNER = 9           # 卡片圆角半径（与缓存模式一致）
 CAPTION_H = 26       # 卡片底部信息行占高（图片区在其上方居中）
 SCAN_BATCH = 100     # 每次向服务器取多少条消息
@@ -1352,15 +1353,23 @@ class App(LangMixin):
         self.b_dl.configure(text=t("online.download_btn", n=n))
 
     def relayout(self) -> None:
-        """按画布宽度重排列数；列数未变时直接返回，避免无谓重排。"""
+        """按画布宽度重排列数；列数未变时直接返回，避免无谓重排。
+
+        每个单元格的实际占宽是 ``CELL_W + 2*CELL_PAD``（grid 的 padx 左右各一份）。
+        早先按 ``(width-10)//CELL_W`` 算列数，漏掉了这部分间距——窗口略宽时列数偏多，
+        整行就比画布宽十几像素、**右侧溢出**（缓存模式是 Canvas 自绘、CELL_W 已含
+        间隙，所以没有这个毛病）。这里按真实步距算，并同样留出两侧 padx。
+        """
         width = max(self.canvas.winfo_width(), 320)
-        cols = max(1, (width - 10) // CELL_W)
+        step = CELL_W + CELL_PAD * 2
+        cols = max(1, (width - CELL_PAD * 2) // step)
         if cols == self.columns:
             return
         self.columns = cols
         for idx, it in enumerate(self.items):
             if it.cell is not None:
-                it.cell.grid(row=idx // cols, column=idx % cols, padx=5, pady=5)
+                it.cell.grid(row=idx // cols, column=idx % cols,
+                             padx=CELL_PAD, pady=CELL_PAD)
 
     def _on_canvas_resize(self, event) -> None:
         self.canvas.itemconfigure(self.win, width=event.width)
