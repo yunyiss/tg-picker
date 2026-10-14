@@ -166,6 +166,7 @@
   "online.log.cancel_req": "已请求取消…",
 
   "online.dialog.api_id_num": "api_id 必须是数字",
+  "online.dialog.confirm_save": "是否把这一条下载到下面这个目录？\n\n{out}\n\n文件名：{name}",
   "online.dialog.need_hash_phone": "请填写 api_hash 和手机号（含国家码，如 +8613800000000）",
   "online.dialog.need_kind": "请至少勾选一种类型",
   "online.dialog.nothing_selected": "还没有选中任何文件（在缩略图上单击即可选中）",

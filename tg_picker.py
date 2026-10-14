@@ -183,6 +183,17 @@ class MediaItem:
     thumb_failed: bool = False    # 缩略图确实取不到（用于语言切换时刷新"无预览"）
 
 
+def item_name(it: MediaItem) -> str:
+    """条目落盘用的文件名（**不含目录**）。
+
+    双击确认与真正下载共用同一套命名，避免两处规则漂移。
+    """
+    date = it.date if isinstance(it.date, datetime) else datetime.now()
+    if it.file_name:
+        return f"{sanitize(Path(it.file_name).stem)}{ext_for(it)}"
+    return f"{it.kind}_{date:%Y%m%d_%H%M%S}_{it.msg_id}{ext_for(it)}"
+
+
 # --------------------------------------------------------------------------
 # 后台线程：Telethon 事件循环 + 与 GUI 的队列通信
 # --------------------------------------------------------------------------
@@ -479,12 +490,7 @@ class Worker:
     async def _download_one(self, it: MediaItem, out_dir: Path) -> Path:
         """下载一个媒体原件到 out_dir，返回路径。带 FloodWait 重试。"""
         date = it.date if isinstance(it.date, datetime) else datetime.now()
-        if it.file_name:
-            stem = sanitize(Path(it.file_name).stem)
-            name = f"{stem}{ext_for(it)}"
-        else:
-            name = f"{it.kind}_{date:%Y%m%d_%H%M%S}_{it.msg_id}{ext_for(it)}"
-        path = unique_path(out_dir / sanitize(name, 150))
+        path = unique_path(out_dir / sanitize(item_name(it), 150))
 
         for attempt in (1, 2):
             try:
@@ -947,8 +953,12 @@ class App(LangMixin):
         self.update_button()
 
     def preview_item(self, it: MediaItem) -> None:
-        """双击：下载该原件。"""
+        """双击：**先确认**再下载该原件（避免误触直接落盘）。"""
         out = self.e_out.get().strip() or str(DEFAULT_OUT)
+        if not messagebox.askyesno(
+            _app_title(), t("online.dialog.confirm_save", out=out, name=item_name(it))
+        ):
+            return
         self.set_busy(True)
         self.worker.submit(self.worker.download_single(it, Path(out)),
                            label=t("online.task.preview"))
