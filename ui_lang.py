@@ -78,17 +78,15 @@ class LangMixin:
         return widget
 
     # ---- 语言切换按钮 ----
-    def _build_lang_switch(self, parent, with_label: bool = False) -> ttk.Frame:
+    def _build_lang_switch(self, parent) -> ttk.Frame:
         """在 ``parent`` 右侧创建语言切换分段按钮。
 
         按钮文案固定为语言自身的显示名（如 ``中文`` / ``English``），不随当前
-        语言变化；选中态用 ``SegOn.TButton`` 表达。
+        语言变化；选中态用 ``SegOn.TButton`` 表达。不再带「语言」提示文字
+        （按钮本身已自明）。
         """
         box = ttk.Frame(parent, style=getattr(self, "_lang_box_style", "TFrame"))
-        box.pack(side="right", padx=(0, 8) if with_label else (0, 12))
-        if with_label:
-            self._T(ttk.Label(box, style="Sub.TLabel"), "lang.label").pack(
-                side="left", padx=(0, 6))
+        box.pack(side="right", padx=(0, 12))
         for code, label in i18n.available().items():
             btn = ttk.Button(box, text=label, style="Seg.TButton", width=8,
                              command=partial(self.on_lang_change, code))

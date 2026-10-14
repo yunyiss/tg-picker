@@ -883,7 +883,7 @@ class App(LangMixin):
         """顶部标题栏：左侧模式标题，右侧语言切换（与缓存模式同一版式）。"""
         bar = ttk.Frame(self.root, padding=(16, 8, 16, 4), style="Panel.TFrame")
         bar.pack(fill="x")
-        self._build_lang_switch(bar, with_label=True)
+        self._build_lang_switch(bar)
         self._T(ttk.Label(bar, style="Title.TLabel"), "app.online_title").pack(side="left")
         self._divider()
 

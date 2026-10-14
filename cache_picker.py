@@ -477,8 +477,8 @@ class CacheApp(LangMixin):
         # padding 左缘与设置区/底栏标签对齐（同为 16）
         bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 8, 16, 4))
         bar.pack(fill="x", side="top")
-        # 语言切换放最右（带「语言」标签，与 API 模式一致），其左是视图概览
-        self._build_lang_switch(bar, with_label=True)
+        # 语言切换放最右（不再带「语言」提示文字），其左是视图概览
+        self._build_lang_switch(bar)
         self.l_header_stat = ttk.Label(bar, text="", style="Status.TLabel")
         self.l_header_stat.pack(side="right")
         self._T(ttk.Label(bar, style="Title.TLabel"), "app.cache_title").pack(side="left")

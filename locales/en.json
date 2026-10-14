@@ -9,11 +9,9 @@
   "firstrun.portable_desc": "Stored in a data folder next to the program; deleting the program folder removes everything — good if you delete the tool after use.",
   "firstrun.userdir_title": "User directory",
   "firstrun.userdir_desc": "Stored in the system user data directory; your config survives moving or upgrading the program.",
-  "firstrun.enter": "Use this →",
+  "firstrun.enter": "Choose this →",
 
-  "lang.label": "Language",
-
-  "launch.heading": "Choose a mode",
+  "launch.heading": "Choose a start mode",
   "launch.mode.api_title": "API mode",
   "launch.mode.api_desc": "Sign in with your Telegram account, browse a group/channel online and download media (requires api_id / api_hash from my.telegram.org).",
   "launch.mode.cache_title": "Local cache mode",
