@@ -2,6 +2,9 @@
 
 面向"非安装版"的使用习惯：有些人用完就把工具删掉，所以首次启动先问清楚数据放哪，
 并说明"删哪个目录即可清除全部痕迹"。选择会被记住（见 :mod:`app_paths`），下次不再询问。
+
+统一入口 :mod:`launcher` 已把这一步做在**同一个窗口**内（选完数据位置即切回模式选择），
+本模块仅在**直接运行 ``tg_picker.py`` / ``cache_picker.py``** 时兜底弹一个独立对话框。
 """
 from __future__ import annotations
 
@@ -11,14 +14,10 @@ import app_paths
 import i18n
 from i18n import t
 from ui_kit import FONT
+from ui_style import ACCENT, BG, CARD, CARD_HOVER, FG, SUB
 
-# 与启动器一致的一套深灰配色（对话框很小，避免为此再引入样式层）
-BG = "#1b1b1f"
-CARD = "#26262c"
-CARD_HOVER = "#30303a"
-ACCENT = "#3b82f6"
-FG = "#e8e8ec"
-SUB = "#9aa0a8"
+# 配色与启动器、两个模式界面共用 ui_style 的同一套色板（原先此处另抄了一份，
+# 有随 ui_style 调整而漂移的风险，故收敛掉）。
 
 
 def ensure_choice(root: tk.Tk) -> None:
