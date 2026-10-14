@@ -14,6 +14,7 @@ import pytest
 import cache_picker as cp
 import i18n
 import tg_picker as tp
+import ui_style
 
 TEXTUAL_CLASSES = ("TButton", "TLabel", "TCheckbutton", "Checkbutton")
 
@@ -82,10 +83,10 @@ def test_action_bar_layout_matches_between_modes(two_apps):
     assert _texts(c_row1, "left")[-2:] == expect_row1
     assert _texts(o_row1, "left")[-2:] == expect_row1
 
-    # 第 2 行左侧：全选 / 反选 / 清除选择（缓存模式前面多一个计数标签，属模式差异）
-    expect_sel = [i18n.t("common.select_all"), i18n.t("common.invert"),
-                  i18n.t("common.clear_sel")]
-    assert _texts(c_row2, "left")[-3:] == expect_sel
+    # 第 2 行左侧：计数 + 全选 / 反选 / 清除选择（两模式同序）
+    expect_sel = [i18n.t("common.count_none"), i18n.t("common.select_all"),
+                  i18n.t("common.invert"), i18n.t("common.clear_sel")]
+    assert _texts(c_row2, "left") == expect_sel
     assert _texts(o_row2, "left") == expect_sel
 
     # 第 2 行右侧：最右为「取消」，其左为主按钮（强调样式）
@@ -107,6 +108,37 @@ def test_progress_and_status_positions_match(two_apps):
             assert _side(app.pb) == "left"
     finally:
         cache_app._hide_progress()
+
+
+def test_card_palette_is_shared():
+    """两模式的卡片色板必须来自同一处——这是选中态视觉一致的前提。"""
+    assert cp.CARD == tp.CARD == ui_style.CARD
+    assert cp.CARD_HOVER == tp.CARD_HOVER == ui_style.CARD_HOVER
+    assert cp.CARD_SEL == tp.CARD_SEL == ui_style.CARD_SEL
+
+
+@pytest.mark.gui
+def test_selected_count_label_matches(two_apps):
+    """「已选 N 个」计数：两模式同款样式、同位置，且选中后同步更新。"""
+    cache_app, online_app = two_apps
+    for app in (cache_app, online_app):
+        assert str(app.l_count.cget("style")) == "Count.TLabel"
+        assert int(app.l_count.cget("width")) == 26
+        assert str(app.l_count.cget("text")) == i18n.t("common.count_none")
+    assert online_app.l_count.master is online_app.b_dl.master, "计数应与主按钮同一行"
+
+    it = tp.MediaItem(msg_id=1, date=datetime.datetime(2026, 10, 10), kind="photo",
+                      size=2048, file_name=None, mime="image/jpeg", msg=_FakeMsg())
+    online_app.items.append(it)
+    online_app.add_item_cell(it)
+    online_app.set_selected(it, True)
+    online_app.update_count()
+    assert str(online_app.l_count.cget("text")) == i18n.t(
+        "common.count_selected", n=1, size=tp.human_size(2048))
+    # 选中态视觉与缓存模式同一套：强调色描边 + 右上角对勾徽标 + 淡蓝底
+    assert str(it.cell.cget("highlightbackground")) == ui_style.ACCENT
+    assert str(it.cell.cget("bg")) == ui_style.CARD_SEL
+    assert str(it.mark_label.cget("text")) == "✓"
 
 
 @pytest.mark.gui

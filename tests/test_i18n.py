@@ -134,8 +134,8 @@ def test_switch_behavior():
     for key in ("app.cache_title", "common.browse", "cache.status.save_done"):
         assert i18n.t(key) == EN[key], f"en 模式下 {key} 未取到英文资源"
         assert i18n.t(key) != ZH[key], f"en 模式下 {key} 与中文相同（未翻译？）"
-    assert i18n.t("cache.bottom.count_selected", n=3, size="1.5 MB") == \
-        EN["cache.bottom.count_selected"].format(n=3, size="1.5 MB")
+    assert i18n.t("common.count_selected", n=3, size="1.5 MB") == \
+        EN["common.count_selected"].format(n=3, size="1.5 MB")
 
     i18n.set_language("zh")
     assert len(calls) == base + 2, "切回 zh 应再通知一次"

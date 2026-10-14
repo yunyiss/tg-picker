@@ -298,13 +298,13 @@ key** with different text:
 `locales/zh.json`
 
 ```json
-{ "cache.bottom.count_selected": "已选 {n} 个　{size}" }
+{ "common.count_selected": "已选 {n} 个　{size}" }
 ```
 
 `locales/en.json`
 
 ```json
-{ "cache.bottom.count_selected": "Selected {n} · {size}" }
+{ "common.count_selected": "Selected {n} · {size}" }
 ```
 
 All string lookups in code go through `i18n.t("key", name=value)`:

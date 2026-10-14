@@ -56,6 +56,9 @@ from ui_style import (
     BG,
     BORDER,
     BTN,
+    CARD,
+    CARD_HOVER,
+    CARD_SEL,
     FG,
     FIELD,
     MUTED,
@@ -119,10 +122,7 @@ GEAR_KEYS = ("conservative", "balanced", "turbo")
 #     一律改用**分段按钮**（Seg.TButton / SegOn.TButton）表达选中态
 #   - 滚动条/进度条同样要补 lightcolor/darkcolor/bordercolor
 # ---------------------------------------------------------------------------
-# 共用色板见 ui_style（两个 GUI 同一套）；这里只保留缓存挑选器专有的卡片色
-CARD = "#26262c"          # 卡片
-CARD_HOVER = "#30303a"    # 悬停
-CARD_SEL = "#24344d"      # 选中：淡蓝底
+# 色板（含卡片色 CARD / CARD_HOVER / CARD_SEL）全部来自 ui_style，两个 GUI 同一套。
 
 # 字体见 ui_kit（两个挑选器共用）
 
@@ -799,7 +799,7 @@ class CacheApp(LangMixin):
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
         r2.pack(fill="x", pady=(10, 0))
         # l_count / b_save 的文本由 update_count() 拥有，故用 t() 设初值但不登记
-        self.l_count = ttk.Label(r2, text=t("cache.bottom.count_none"),
+        self.l_count = ttk.Label(r2, text=t("common.count_none"),
                                  style="Count.TLabel", width=26)
         self.l_count.pack(side="left", padx=(0, 12))
         self._T(ttk.Button(r2, command=self.on_select_all), "common.select_all").pack(
@@ -1234,12 +1234,15 @@ class CacheApp(LangMixin):
         cell["tag_txt"] = self.canvas.create_text(
             0, 0, anchor="center", text=t("cell.video_tag"), fill="#e8e8ec",
             font=(FONT, 8), state="hidden")
-        # 选中徽标：圆底 + 对勾
+        # 选中徽标：内容区底色描边圈 + 强调色圆底 + 对勾。
+        # 外圈是必要的——缩略图可能是亮色/同色系，纯强调色圆底在图上会糊掉。
+        cell["badge_ring"] = self.canvas.create_oval(
+            0, 0, 0, 0, fill=BG, outline="", state="hidden")
         cell["badge"] = self.canvas.create_oval(
             0, 0, 0, 0, fill=ACCENT, outline="", state="hidden")
         cell["badge_txt"] = self.canvas.create_text(
             0, 0, anchor="center", text="✓", fill="#ffffff",
-            font=(FONT, 10, "bold"), state="hidden")
+            font=(FONT, 11, "bold"), state="hidden")
         cell["info"] = self.canvas.create_text(
             0, 0, anchor="nw", text="", fill=SUB, font=(FONT, 9))
         cell["photo"] = None
@@ -1334,7 +1337,8 @@ class CacheApp(LangMixin):
 
     def _rebuild_cell(self, cell: dict) -> None:
         """删除并重建该卡片的全部图元（用于从失效图像中恢复）。"""
-        for key in ("rect", "img", "tag", "tag_txt", "badge", "badge_txt", "info"):
+        for key in ("rect", "img", "tag", "tag_txt", "badge_ring", "badge",
+                    "badge_txt", "info"):
             try:
                 self.canvas.delete(cell[key])
             except (tk.TclError, KeyError):
@@ -1346,7 +1350,7 @@ class CacheApp(LangMixin):
         # 先解除图像引用，再丢弃 Python 侧引用——否则 Tk 销毁图像后，
         # Canvas 图元会留下悬空引用，下次复用时 itemconfigure 直接抛错。
         self._canvas_cfg(cell, "img", image="", state="hidden")
-        for key in ("rect", "tag", "tag_txt", "badge", "badge_txt", "info"):
+        for key in ("rect", "tag", "tag_txt", "badge_ring", "badge", "badge_txt", "info"):
             self._canvas_cfg(cell, key, state="hidden")
         cell["photo"] = None
 
@@ -1418,18 +1422,22 @@ class CacheApp(LangMixin):
                 self._canvas_cfg(cell, "tag", state="hidden")
                 self._canvas_cfg(cell, "tag_txt", state="hidden")
 
-            # 选中徽标：仅选中时出现（右上角圆底对勾）
+            # 选中徽标：仅选中时出现（右上角圆底对勾 + 一圈底色描边圈）
             if is_sel:
-                r = 11
+                r, ring = 11, 3
                 cx = x + CARD_W - r - 7
                 cy = y + r + 7
+                self._canvas_cfg(cell, "badge_ring", state="normal")
+                self._canvas_coords(cell, "badge_ring",
+                                    cx - r - ring, cy - r - ring,
+                                    cx + r + ring, cy + r + ring)
                 self._canvas_cfg(cell, "badge", state="normal")
                 self._canvas_coords(cell, "badge", cx - r, cy - r, cx + r, cy + r)
                 self._canvas_cfg(cell, "badge_txt", state="normal")
                 self._canvas_coords(cell, "badge_txt", cx, cy)
             else:
-                self._canvas_cfg(cell, "badge", state="hidden")
-                self._canvas_cfg(cell, "badge_txt", state="hidden")
+                for key in ("badge_ring", "badge", "badge_txt"):
+                    self._canvas_cfg(cell, key, state="hidden")
 
             # 底部信息：日期 时间 · 大小（水平居中，列尾自然对齐）
             # 统一用二级文字色：选中时也不提级，避免同一信息出现两种层级。
@@ -1725,10 +1733,10 @@ class CacheApp(LangMixin):
                 n += 1
         if n:
             self.l_count.configure(
-                text=t("cache.bottom.count_selected", n=n, size=human_size(total)))
+                text=t("common.count_selected", n=n, size=human_size(total)))
             self.b_save.configure(text=t("cache.bottom.save_n", n=n))
         else:
-            self.l_count.configure(text=t("cache.bottom.count_none"))
+            self.l_count.configure(text=t("common.count_none"))
             self.b_save.configure(text=t("cache.bottom.save_none"))
         self._update_header()
 

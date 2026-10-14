@@ -124,14 +124,14 @@ def test_cache_gui_renders_scrolls_and_switches_language(tdata_dir: Path, tk_roo
         if state["phase"] == 5:                # 语言切换
             # 先回中文，使起点确定（不依赖本机已保存的语言偏好）
             i18n.set_language("zh")
-            rec["count_none_zh"] = i18n.t("cache.bottom.count_none")
+            rec["count_none_zh"] = i18n.t("common.count_none")
             rec["sort_key_before"] = app.v_sort.get()
             rec["count_zh_before"] = app.l_count.cget("text")
 
             i18n.set_language("en")
             # 期望值必须在"英文模式当下"取，否则断言时语言已切回中文
             rec["expected_sort_en"] = [i18n.t(f"sort.{k}") for k in cp.SORT_KEYS]
-            rec["expected_count_none_en"] = i18n.t("cache.bottom.count_none")
+            rec["expected_count_none_en"] = i18n.t("common.count_none")
             rec["expected_save_none_en"] = i18n.t("cache.bottom.save_none")
             rec["sort_values_en"] = list(app.cb_sort["values"])
             rec["sort_key_after"] = app.v_sort.get()

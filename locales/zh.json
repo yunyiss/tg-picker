@@ -27,6 +27,8 @@
   "common.select_all": "全选",
   "common.invert": "反选",
   "common.clear_sel": "清除选择",
+  "common.count_none": "未选择",
+  "common.count_selected": "已选 {n} 个　{size}",
   "common.ready": "就绪",
   "common.cancel": "取消",
   "common.cancel_req": "已请求取消…",
@@ -68,8 +70,6 @@
   "cache.toolbar.search_label": "搜索",
   "cache.toolbar.clear_search": "✕",
 
-  "cache.bottom.count_none": "未选择",
-  "cache.bottom.count_selected": "已选 {n} 个　{size}",
   "cache.bottom.bydate": "按日期分文件夹",
   "cache.bottom.out_label": "保存到",
   "cache.bottom.save_none": "保存选中",

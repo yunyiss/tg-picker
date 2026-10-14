@@ -27,6 +27,8 @@
   "common.select_all": "Select all",
   "common.invert": "Invert",
   "common.clear_sel": "Clear selection",
+  "common.count_none": "None selected",
+  "common.count_selected": "Selected {n} · {size}",
   "common.ready": "Ready",
   "common.cancel": "Cancel",
   "common.cancel_req": "Cancellation requested…",
@@ -68,8 +70,6 @@
   "cache.toolbar.search_label": "Search",
   "cache.toolbar.clear_search": "✕",
 
-  "cache.bottom.count_none": "None selected",
-  "cache.bottom.count_selected": "Selected {n} · {size}",
   "cache.bottom.bydate": "Split by date",
   "cache.bottom.out_label": "Save to",
   "cache.bottom.save_none": "Save selected",

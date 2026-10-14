@@ -53,6 +53,9 @@ from ui_style import (
     BG,
     BORDER,
     BTN,
+    CARD,
+    CARD_HOVER,
+    CARD_SEL,
     FG,
     FIELD,
     MUTED,
@@ -73,10 +76,8 @@ def _app_title() -> str:
     """窗口标题（同时用作所有对话框的标题）。"""
     return t("app.online_title")
 
-# 界面配色：深色主题色板与缓存挑选器**共用**（见 ui_style 的导入）；卡片色为网格专有
-CARD = "#2b2b2b"
-CARD_SEL = "#1f6feb"
-CARD_HOVER = "#3a3a3a"
+# 界面配色（含卡片色 CARD / CARD_HOVER / CARD_SEL）全部来自 ui_style，
+# 与缓存挑选器**共用同一套**，两模式的选中态视觉因此完全一致。
 
 THUMB = 150          # 缩略图边长
 CELL_W = 168         # 单元格宽
@@ -192,6 +193,7 @@ class MediaItem:
     photo: object = None          # ImageTk.PhotoImage（必须持有引用）
     cell: object = None           # 单元格 Frame
     img_label: object = None
+    info_label: object = None     # 底部信息行（日期 · 大小）
     mark_label: object = None
     thumb_failed: bool = False    # 缩略图确实取不到（用于语言切换时刷新"无预览"）
 
@@ -705,6 +707,8 @@ class App(LangMixin):
         st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
         st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
         st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
+        st.configure("Count.TLabel", background=PANEL, foreground=ACCENT,
+                     font=(FONT, 10, "bold"))
         # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
         st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
         # 按钮：统一高度、压掉 clam 的立体边框
@@ -788,7 +792,7 @@ class App(LangMixin):
         LangMixin.retranslate 统一处理，这里只补：主按钮计数、登录状态、
         待填写的验证码/密码提示、取不到缩略图的格子占位。
         """
-        self.update_button()                       # "下载选中（n）"
+        self.update_count()                       # 「已选 N 个」+「保存选中（n）」
         self.l_login.configure(text=self._login_text())
         self._render_prompt()                      # 待填写的验证码/密码提示
         for it in self.items:                      # 单元格里"无预览"占位
@@ -972,9 +976,13 @@ class App(LangMixin):
             side="left", padx=(0, 8))
         self._T(ttk.Button(r1, command=self.on_open_dir), "common.open_dir").pack(side="left")
 
-        # 第 2 行：选择操作（左）+ 主按钮 / 取消（右）
+        # 第 2 行：计数 + 选择操作（左）+ 主按钮 / 取消（右）
         r2 = ttk.Frame(f, style="Panel.TFrame")
         r2.pack(fill="x", pady=(10, 0))
+        # l_count / b_dl 的文本由 update_count() 拥有，故用 t() 设初值但不登记
+        self.l_count = ttk.Label(r2, text=t("common.count_none"),
+                                 style="Count.TLabel", width=26)
+        self.l_count.pack(side="left", padx=(0, 12))
         self._T(ttk.Button(r2, command=lambda: self.set_all(True)), "common.select_all").pack(
             side="left", padx=(0, 8))
         self._T(ttk.Button(r2, command=self.invert_all), "common.invert").pack(
@@ -984,7 +992,7 @@ class App(LangMixin):
         self.b_cancel = self._T(ttk.Button(r2, command=self.on_cancel, state="disabled"),
                                 "common.cancel")
         self.b_cancel.pack(side="right")
-        # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
+        # b_dl 的文本由 update_count() 拥有，故用 t() 设初值但不登记
         self.b_dl = ttk.Button(r2, text=t("online.download_btn", n=0), style="Accent.TButton",
                                command=self.on_download)
         self.b_dl.pack(side="right", padx=(0, 8))
@@ -1064,7 +1072,7 @@ class App(LangMixin):
             w.destroy()
         self.next_offset = 0
         self.b_more.configure(state="disabled")
-        self.update_button()
+        self.update_count()
         self._do_load(more=False)
 
     def on_load_more(self) -> None:
@@ -1154,37 +1162,48 @@ class App(LangMixin):
             text=f"{it.date:%m-%d %H:%M}  {human_size(it.size)}",
         )
         info.pack(side="bottom", pady=(0, 3))
-        mark = tk.Label(cell, bg=CARD, fg="#ffffff", text="", font=(FONT, 10, "bold"))
-        mark.place(x=6, y=4)
-        it.cell, it.img_label, it.mark_label = cell, img_label, mark
+        # 选中徽标：右上角强调色小徽标 + 白勾（与缓存模式的右上角圆底对勾同位置、同语言）
+        mark = tk.Label(cell, bg=CARD, fg="#ffffff", text="", font=(FONT, 10, "bold"),
+                        padx=5, pady=1)
+        mark.place(relx=1.0, x=-6, y=6, anchor="ne")
+        it.cell, it.img_label, it.info_label, it.mark_label = cell, img_label, info, mark
         for w in (cell, img_label, info, mark):
             w.bind("<Button-1>", lambda e, i=it: self.on_cell_click(e, i))
             w.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
             w.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
             w.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
 
+    def _paint_cell(self, it: MediaItem, bg: str, border: str, *,
+                    badge: bool = False) -> None:
+        """给一个单元格的各部件统一上色（悬停 / 选中 / 常态共用，避免漏改某一块）。"""
+        for w in (it.cell, it.img_label, it.info_label):
+            w.configure(bg=bg)
+        it.cell.configure(highlightbackground=border)
+        it.mark_label.configure(bg=ACCENT if badge else bg)
+
     def hover_item(self, it: MediaItem, on: bool) -> None:
         """鼠标进出单元格时切换底色（已选中项保持选中底色）。"""
         if it.selected:
             return
-        color = CARD_HOVER if on else CARD
-        for w in (it.cell, it.img_label, it.mark_label):
-            w.configure(bg=color)
+        self._paint_cell(it, CARD_HOVER if on else CARD, CARD)
 
     def set_selected(self, it: MediaItem, value: bool) -> None:
-        """设置单条选中态并刷新其外观（单击 / 连选 / 全选 / 反选共用）。"""
+        """设置单条选中态并刷新其外观（单击 / 连选 / 全选 / 反选共用）。
+
+        与缓存模式**同一套视觉**：卡片铺淡蓝底 + 强调色描边 + 右上角对勾徽标；
+        缩略图本身保持中性底，不再用亮色铺满整卡把画面压掉。
+        """
         if it.selected == value:
             return
         it.selected = value
-        color = CARD_SEL if value else CARD
-        it.cell.configure(bg=color, highlightbackground=color)
-        it.img_label.configure(bg=color)
-        it.mark_label.configure(bg=color, text="✓" if value else "")
+        self._paint_cell(it, CARD_SEL if value else CARD,
+                         ACCENT if value else CARD, badge=value)
+        it.mark_label.configure(text="✓" if value else "")
 
     def toggle_item(self, it: MediaItem) -> None:
         """单击切换该媒体的选中态并刷新计数。"""
         self.set_selected(it, not it.selected)
-        self.update_button()
+        self.update_count()
 
     def on_cell_click(self, event, it: MediaItem) -> None:
         """单元格单击：Shift+单击按当前顺序**连选**（与缓存模式同一套交互）。
@@ -1198,7 +1217,7 @@ class App(LangMixin):
             turn_on = not it.selected
             for i in range(lo, hi + 1):
                 self.set_selected(self.items[i], turn_on)
-            self.update_button()
+            self.update_count()
         else:
             self.toggle_item(it)
         self.last_click = idx
@@ -1218,17 +1237,27 @@ class App(LangMixin):
         """全选或清空选择（对应"全选" / "清除选择"按钮）。"""
         for it in self.items:
             self.set_selected(it, value)
-        self.update_button()
+        self.update_count()
 
     def invert_all(self) -> None:
         """反选：对当前已加载的条目取反（与缓存模式一致）。"""
         for it in self.items:
             self.set_selected(it, not it.selected)
-        self.update_button()
+        self.update_count()
 
-    def update_button(self) -> None:
-        """刷新主按钮上的选中计数（语言切换时也会重算）。"""
-        n = sum(1 for it in self.items if it.selected)
+    def update_count(self) -> None:
+        """刷新「已选」计数标签与主按钮文案（选择变化与语言切换时都会重算）。
+
+        与缓存模式同一套措辞（共用键 common.count_none / count_selected）。
+        """
+        picked = [it for it in self.items if it.selected]
+        n = len(picked)
+        if n:
+            size = sum(it.size or 0 for it in picked)
+            self.l_count.configure(
+                text=t("common.count_selected", n=n, size=human_size(size)))
+        else:
+            self.l_count.configure(text=t("common.count_none"))
         self.b_dl.configure(text=t("online.download_btn", n=n))
 
     def relayout(self) -> None:

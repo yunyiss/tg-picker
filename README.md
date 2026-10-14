@@ -253,13 +253,13 @@ locales/en.json     英文（键集合与 zh.json 严格一致）
 `locales/zh.json`
 
 ```json
-{ "cache.bottom.count_selected": "已选 {n} 个　{size}" }
+{ "common.count_selected": "已选 {n} 个　{size}" }
 ```
 
 `locales/en.json`
 
 ```json
-{ "cache.bottom.count_selected": "Selected {n} · {size}" }
+{ "common.count_selected": "Selected {n} · {size}" }
 ```
 
 代码里取词统一走 `i18n.t("键名", 参数=值)`：
