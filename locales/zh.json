@@ -29,6 +29,7 @@
   "common.clear_sel": "清除选择",
   "common.ready": "就绪",
   "common.cancel": "取消",
+  "common.cancel_req": "已请求取消…",
   "common.submit": "提交",
   "common.err_name_conflict": "命名冲突过多，无法为 {name} 找到可用名字",
 
@@ -165,7 +166,6 @@
   "online.log.downloaded": "已保存：{path}",
   "online.log.dl_single_failed": "保存失败：{name}: {exc}",
   "online.log.submit_err": "[{label}] 异常: {name}: {exc}",
-  "online.log.cancel_req": "已请求取消…",
   "online.log.path_copied": "打开目录失败，已把路径复制到剪贴板：{path}",
   "online.log.proxy_set": "使用代理：{proxy}",
 

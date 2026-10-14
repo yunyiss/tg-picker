@@ -653,6 +653,7 @@ class App(LangMixin):
         self._pump_job = None
         self.who = ""                 # 已登录显示名（供语言切换时重建标签）
         self._prompt_spec = None      # 待填写的提示（语言键+参数），切换语言时重渲染
+        self.last_click: int | None = None   # 上次单击的条目下标（供 Shift 连选）
 
         # i18n：先定语言再建界面（首次绘制即用正确语言）；登记表先建、回调后注册。
         i18n.init()
@@ -924,15 +925,17 @@ class App(LangMixin):
             row=0, column=3, padx=(0, 12))
         self._T(ttk.Button(f, command=lambda: self.set_all(True)), "common.select_all").grid(
             row=0, column=4, padx=(0, 4))
+        self._T(ttk.Button(f, command=self.invert_all), "common.invert").grid(
+            row=0, column=5, padx=(0, 4))
         self._T(ttk.Button(f, command=lambda: self.set_all(False)), "common.clear_sel").grid(
-            row=0, column=5, padx=(0, 12))
+            row=0, column=6, padx=(0, 12))
         # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
         self.b_dl = ttk.Button(f, text=t("online.download_btn", n=0), style="Accent.TButton",
                                command=self.on_download)
-        self.b_dl.grid(row=0, column=6, padx=(0, 8))
+        self.b_dl.grid(row=0, column=7, padx=(0, 8))
         self.b_cancel = self._T(ttk.Button(f, command=self.on_cancel, state="disabled"),
                                 "common.cancel")
-        self.b_cancel.grid(row=0, column=7)
+        self.b_cancel.grid(row=0, column=8)
         f.columnconfigure(1, weight=1)
 
         f2 = ttk.Frame(self.root, padding=(12, 4, 12, 8), style="Bar.TFrame")
@@ -1057,7 +1060,7 @@ class App(LangMixin):
         """请求取消当前任务。若正卡在等待验证码/密码，同时唤醒后台协程。"""
         self.worker.cancel.set()
         self.worker.prompter.provide(None)
-        self.log(t("online.log.cancel_req"))
+        self.log(t("common.cancel_req"))
 
     def on_pick_dir(self) -> None:
         """选择下载输出目录并回填到输入框。"""
@@ -1103,7 +1106,7 @@ class App(LangMixin):
         mark.place(x=6, y=4)
         it.cell, it.img_label, it.mark_label = cell, img_label, mark
         for w in (cell, img_label, info, mark):
-            w.bind("<Button-1>", lambda e, i=it: self.toggle_item(i))
+            w.bind("<Button-1>", lambda e, i=it: self.on_cell_click(e, i))
             w.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
             w.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
             w.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
@@ -1116,14 +1119,37 @@ class App(LangMixin):
         for w in (it.cell, it.img_label, it.mark_label):
             w.configure(bg=color)
 
-    def toggle_item(self, it: MediaItem) -> None:
-        """单击切换该媒体的选中态并刷新计数。"""
-        it.selected = not it.selected
-        color = CARD_SEL if it.selected else CARD
+    def set_selected(self, it: MediaItem, value: bool) -> None:
+        """设置单条选中态并刷新其外观（单击 / 连选 / 全选 / 反选共用）。"""
+        if it.selected == value:
+            return
+        it.selected = value
+        color = CARD_SEL if value else CARD
         it.cell.configure(bg=color, highlightbackground=color)
         it.img_label.configure(bg=color)
-        it.mark_label.configure(bg=color, text="✓" if it.selected else "")
+        it.mark_label.configure(bg=color, text="✓" if value else "")
+
+    def toggle_item(self, it: MediaItem) -> None:
+        """单击切换该媒体的选中态并刷新计数。"""
+        self.set_selected(it, not it.selected)
         self.update_button()
+
+    def on_cell_click(self, event, it: MediaItem) -> None:
+        """单元格单击：Shift+单击按当前顺序**连选**（与缓存模式同一套交互）。
+
+        与缓存模式一致：以被点条目的"当前是否已选"决定整段是选中还是取消，
+        再更新"上次单击位置"供下一次 Shift 连选使用。
+        """
+        idx = self.items.index(it)
+        if event.state & 0x0001 and self.last_click is not None:
+            lo, hi = sorted((self.last_click, idx))
+            turn_on = not it.selected
+            for i in range(lo, hi + 1):
+                self.set_selected(self.items[i], turn_on)
+            self.update_button()
+        else:
+            self.toggle_item(it)
+        self.last_click = idx
 
     def preview_item(self, it: MediaItem) -> None:
         """双击：**先确认**再下载该原件（避免误触直接落盘）。"""
@@ -1139,12 +1165,13 @@ class App(LangMixin):
     def set_all(self, value: bool) -> None:
         """全选或清空选择（对应"全选" / "清除选择"按钮）。"""
         for it in self.items:
-            if it.selected != value:
-                it.selected = value
-                color = CARD_SEL if value else CARD
-                it.cell.configure(bg=color, highlightbackground=color)
-                it.img_label.configure(bg=color)
-                it.mark_label.configure(bg=color, text="✓" if value else "")
+            self.set_selected(it, value)
+        self.update_button()
+
+    def invert_all(self) -> None:
+        """反选：对当前已加载的条目取反（与缓存模式一致）。"""
+        for it in self.items:
+            self.set_selected(it, not it.selected)
         self.update_button()
 
     def update_button(self) -> None:

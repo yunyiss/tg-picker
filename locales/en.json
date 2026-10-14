@@ -29,6 +29,7 @@
   "common.clear_sel": "Clear selection",
   "common.ready": "Ready",
   "common.cancel": "Cancel",
+  "common.cancel_req": "Cancellation requested…",
   "common.submit": "Submit",
   "common.err_name_conflict": "Too many name conflicts; no free name available for {name}",
 
@@ -165,7 +166,6 @@
   "online.log.downloaded": "Saved: {path}",
   "online.log.dl_single_failed": "Save failed: {name}: {exc}",
   "online.log.submit_err": "[{label}] error: {name}: {exc}",
-  "online.log.cancel_req": "Cancellation requested…",
   "online.log.path_copied": "Could not open the folder; its path was copied to the clipboard: {path}",
   "online.log.proxy_set": "Using proxy: {proxy}",
 

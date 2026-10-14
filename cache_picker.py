@@ -818,6 +818,9 @@ class CacheApp(LangMixin):
         self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
                                  command=self.on_save)
         self.b_save.pack(side="left", padx=(12, 0))
+        self.b_cancel = self._T(ttk.Button(r2, command=self.on_cancel, state="disabled"),
+                                "common.cancel")
+        self.b_cancel.pack(side="left", padx=(8, 0))
 
     def _build_grid(self) -> None:
         wrap = ttk.Frame(self.root, padding=(14, 10, 8, 10))
@@ -1755,6 +1758,15 @@ class CacheApp(LangMixin):
             pass
         self.set_status("cache.status.path_copied", path=path)
 
+    def on_cancel(self) -> None:
+        """请求取消当前的扫描 / 保存（复用已有 ``self.cancel`` 事件）。
+
+        取消机制（``load_cache`` / ``save_items`` 的 ``cancel_event``）一直存在，
+        此前只是没有界面入口；这里补上，与 API 模式的「取消」按钮对齐。
+        """
+        self.cancel.set()
+        self.set_status("common.cancel_req")
+
     def on_save(self) -> None:
         """保存选中项：二次确认后在后台线程解密写出到输出目录。"""
         if self.busy:
@@ -1917,6 +1929,8 @@ class CacheApp(LangMixin):
         self.b_scan.configure(state=state)
         self.b_reload.configure(state=state)
         self.b_clean.configure(state=state)
+        # 取消按钮与上面相反：仅在任务进行时可用
+        self.b_cancel.configure(state="normal" if busy else "disabled")
 
     def _on_close(self) -> None:
         """关闭窗口：停掉后台任务与所有 after 定时任务，避免销毁后回调报错。"""
