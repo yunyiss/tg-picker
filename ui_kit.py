@@ -52,6 +52,33 @@ def unique_path(path: Path) -> Path:
     raise RuntimeError(t("common.err_name_conflict", name=path.name))
 
 
+def rounded_pts(x1: float, y1: float, x2: float, y2: float, r: int,
+                seg: int = 6) -> list[float]:
+    """生成圆角矩形轮廓的点列（四角按 ``seg`` 段采样圆弧），供 Canvas 多边形使用。
+
+    Frame 与 Canvas 的直角 rectangle 都画不出圆角；两个挑选器的卡片因此都改用
+    这个点列 + ``create_polygon(smooth=False)`` 绘制，圆角半径才真实、外观才一致。
+
+    注意：早期版本每个角只给 2 个锚点、依赖 ``smooth=True`` 插值，实测视觉半径
+    只有 3-4px（远小于设定值）；故这里按 ``seg`` 段采样圆弧、以 ``smooth=False``
+    直接连线。
+    """
+    import math
+
+    pts: list[float] = []
+    corners = (
+        (x2 - r, y1 + r, -math.pi / 2),   # 右上
+        (x2 - r, y2 - r, 0.0),            # 右下
+        (x1 + r, y2 - r, math.pi / 2),    # 左下
+        (x1 + r, y1 + r, math.pi),        # 左上
+    )
+    for cx, cy, start in corners:
+        for i in range(seg + 1):
+            a = start + (math.pi / 2) * i / seg
+            pts += [cx + r * math.cos(a), cy + r * math.sin(a)]
+    return pts
+
+
 # ---------------------------------------------------------------------------
 # 硬件检测与并发档位推荐（移植自上游 tg-scoop 的 hardware.py）
 #

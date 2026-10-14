@@ -45,6 +45,7 @@ from ui_kit import (
     gear_workers,
     human_size,
     recommended_workers,
+    rounded_pts,
     unique_path,
 )
 from ui_lang import LangMixin
@@ -1247,30 +1248,6 @@ class CacheApp(LangMixin):
             0, 0, anchor="nw", text="", fill=SUB, font=(FONT, 9))
         cell["photo"] = None
 
-    @staticmethod
-    def _rounded_pts(x1: int, y1: int, x2: int, y2: int, r: int,
-                     seg: int = 6) -> list[float]:
-        """生成圆角矩形的点列（四角用真实圆弧采样）。
-
-        早期版本每个角只给 2 个锚点、依赖 smooth=True 插值，实测视觉半径
-        只有 3-4px（远小于设定值）。这里改为按 seg 段采样圆弧、以
-        smooth=False 直接连线，圆角半径才与参数一致。
-        """
-        import math
-
-        pts: list[float] = []
-        corners = (
-            (x2 - r, y1 + r, -math.pi / 2),   # 右上
-            (x2 - r, y2 - r, 0.0),            # 右下
-            (x1 + r, y2 - r, math.pi / 2),    # 左下
-            (x1 + r, y1 + r, math.pi),        # 左上
-        )
-        for cx, cy, start in corners:
-            for i in range(seg + 1):
-                a = start + (math.pi / 2) * i / seg
-                pts += [cx + r * math.cos(a), cy + r * math.sin(a)]
-        return pts
-
     def _acquire_cell(self) -> dict:
         """取一个空闲图元组；池子为空则新建一组 Canvas 图元。"""
         for cell in self.cell_pool:
@@ -1386,7 +1363,7 @@ class CacheApp(LangMixin):
             self._canvas_cfg(cell, "rect", state="normal", fill=fill, outline=outline)
             self._canvas_coords(
                 cell, "rect",
-                *self._rounded_pts(x, y, x + CARD_W, y + CARD_H, CORNER))
+                *rounded_pts(x, y, x + CARD_W, y + CARD_H, CORNER))
 
             # 缩略图：在 IMG_BOX 方框内居中
             photo = self._thumb_for(idx, it)
@@ -1413,8 +1390,8 @@ class CacheApp(LangMixin):
                 ty = anchor_y + img_h - tag_h - 3
                 self._canvas_cfg(cell, "tag", state="normal")
                 self._canvas_coords(cell, "tag",
-                                    *self._rounded_pts(tx, ty, tx + tag_w,
-                                                       ty + tag_h, 4))
+                                    *rounded_pts(tx, ty, tx + tag_w,
+                                                 ty + tag_h, 4))
                 self._canvas_cfg(cell, "tag_txt", state="normal")
                 self._canvas_coords(cell, "tag_txt",
                                     tx + tag_w // 2, ty + tag_h // 2)

@@ -115,6 +115,7 @@ def test_card_palette_is_shared():
     assert cp.CARD == tp.CARD == ui_style.CARD
     assert cp.CARD_HOVER == tp.CARD_HOVER == ui_style.CARD_HOVER
     assert cp.CARD_SEL == tp.CARD_SEL == ui_style.CARD_SEL
+    assert cp.CORNER == tp.CORNER, "两模式卡片圆角半径应一致"
 
 
 @pytest.mark.gui
@@ -131,14 +132,46 @@ def test_selected_count_label_matches(two_apps):
                       size=2048, file_name=None, mime="image/jpeg", msg=_FakeMsg())
     online_app.items.append(it)
     online_app.add_item_cell(it)
+    assert online_app.l_count.cget("text") == i18n.t("common.count_none")
+    assert it.cell.itemcget(it.badge, "state") == "hidden", "未选中不应显示徽标"
+    assert it.cell.winfo_reqwidth() == tp.CELL_W, "单元格画布应保持固定尺寸"
     online_app.set_selected(it, True)
     online_app.update_count()
     assert str(online_app.l_count.cget("text")) == i18n.t(
         "common.count_selected", n=1, size=tp.human_size(2048))
-    # 选中态视觉与缓存模式同一套：强调色描边 + 右上角对勾徽标 + 淡蓝底
-    assert str(it.cell.cget("highlightbackground")) == ui_style.ACCENT
-    assert str(it.cell.cget("bg")) == ui_style.CARD_SEL
-    assert str(it.mark_label.cget("text")) == "✓"
+    # 选中态视觉与缓存模式同一套：圆角卡片 + 强调色描边 + 淡蓝底 + 右上角圆形对勾徽标
+    assert it.cell.itemcget(it.card, "outline") == ui_style.ACCENT
+    assert it.cell.itemcget(it.card, "fill") == ui_style.CARD_SEL
+    assert it.cell.itemcget(it.badge, "state") == "normal"
+    assert it.cell.itemcget(it.badge_txt, "text") == "✓"
+    # 卡片底是圆角多边形（不是直角矩形），与缓存模式同半径
+    assert len(it.cell.coords(it.card)) > 8, "卡片底应为圆角多边形而非矩形"
+
+
+@pytest.mark.gui
+def test_api_thumb_items_switch(tk_root):
+    """缩略图到位 / 取不到时，Canvas 图元正确切换（替换原先的 Label 逻辑）。"""
+    from PIL import Image
+
+    i18n.set_language("zh")
+    app = tp.App(tk_root)
+    it = tp.MediaItem(msg_id=7, date=datetime.datetime(2026, 10, 10), kind="photo",
+                      size=100, file_name=None, mime="image/jpeg", msg=_FakeMsg())
+    app.items.append(it)
+    app.add_item_cell(it)
+    app.by_id[it.msg_id] = it
+
+    app._msg_thumb(("thumb", it.msg_id, Image.new("RGB", (60, 40), "red")))
+    assert it.cell.itemcget(it.img, "state") == "normal"
+    assert it.cell.itemcget(it.img_txt, "state") == "hidden"
+    assert it.photo is not None, "必须持有 PhotoImage 引用"
+
+    app._msg_thumb(("thumb", it.msg_id, None))
+    assert it.thumb_failed is True
+    assert it.cell.itemcget(it.img, "state") == "hidden"
+    assert it.cell.itemcget(it.img_txt, "state") == "normal"
+    assert it.cell.itemcget(it.img_txt, "text") == i18n.t("cell.no_preview")
+    app._on_close()
 
 
 @pytest.mark.gui

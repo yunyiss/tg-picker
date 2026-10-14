@@ -43,7 +43,7 @@ import i18n
 import ui_kit
 import ui_style
 from i18n import t
-from ui_kit import FONT, human_size, unique_path
+from ui_kit import FONT, human_size, rounded_pts, unique_path
 from ui_lang import LangMixin
 from ui_style import (
     ACCENT,
@@ -82,6 +82,8 @@ def _app_title() -> str:
 THUMB = 150          # 缩略图边长
 CELL_W = 168         # 单元格宽
 CELL_H = 205         # 单元格高
+CORNER = 9           # 卡片圆角半径（与缓存模式一致）
+CAPTION_H = 26       # 卡片底部信息行占高（图片区在其上方居中）
 SCAN_BATCH = 100     # 每次向服务器取多少条消息
 SCAN_MAX_MSGS = 6000 # 单次"加载"最多扫描多少条消息，防失控
 PUMP_MS = 80         # 消息队列轮询间隔（毫秒）
@@ -191,10 +193,14 @@ class MediaItem:
     selected: bool = False
     thumb: object = None          # PIL.Image
     photo: object = None          # ImageTk.PhotoImage（必须持有引用）
-    cell: object = None           # 单元格 Frame
-    img_label: object = None
-    info_label: object = None     # 底部信息行（日期 · 大小）
-    mark_label: object = None
+    cell: object = None           # 单元格 Canvas（自绘圆角卡片，与缓存模式同一套画法）
+    card: object = None           # 卡片底：圆角多边形图元
+    img: object = None            # 缩略图图元
+    img_txt: object = None        # 占位文字（载入中 / 无预览）
+    info: object = None           # 底部信息文字（日期 · 大小）
+    badge_ring: object = None     # 选中徽标：外圈（内容区底色）
+    badge: object = None          # 选中徽标：强调色圆底
+    badge_txt: object = None      # 选中徽标：白色对勾
     thumb_failed: bool = False    # 缩略图确实取不到（用于语言切换时刷新"无预览"）
 
 
@@ -796,8 +802,8 @@ class App(LangMixin):
         self.l_login.configure(text=self._login_text())
         self._render_prompt()                      # 待填写的验证码/密码提示
         for it in self.items:                      # 单元格里"无预览"占位
-            if it.thumb_failed and it.img_label is not None:
-                it.img_label.configure(text=t("cell.no_preview"))
+            if it.thumb_failed and it.cell is not None:
+                it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"))
 
     def _divider(self) -> None:
         """一条 1px 分隔线，用于划分区域（与缓存模式同款）。"""
@@ -1146,59 +1152,73 @@ class App(LangMixin):
 
     # ---------- 缩略图网格 ----------
     def add_item_cell(self, it: MediaItem) -> None:
-        """为一条媒体创建网格单元格（图片位 + 信息行 + 选中标记）并绑定事件。"""
-        cell = tk.Frame(self.inner, bg=CARD, width=CELL_W, height=CELL_H, bd=0,
-                        highlightthickness=2, highlightbackground=CARD)
-        cell.grid_propagate(False)
-        cell.pack_propagate(False)
-        img_label = tk.Label(cell, bg=CARD, fg=SUB, text=t("cell.loading"),
-                             font=(FONT, 9))
-        img_label.pack(expand=True)
-        info = tk.Label(
-            cell,
-            bg=CARD,
-            fg=SUB,
-            font=(FONT, 7),
-            text=f"{it.date:%m-%d %H:%M}  {human_size(it.size)}",
-        )
-        info.pack(side="bottom", pady=(0, 3))
-        # 选中徽标：右上角强调色小徽标 + 白勾（与缓存模式的右上角圆底对勾同位置、同语言）
-        mark = tk.Label(cell, bg=CARD, fg="#ffffff", text="", font=(FONT, 10, "bold"),
-                        padx=5, pady=1)
-        mark.place(relx=1.0, x=-6, y=6, anchor="ne")
-        it.cell, it.img_label, it.info_label, it.mark_label = cell, img_label, info, mark
-        for w in (cell, img_label, info, mark):
-            w.bind("<Button-1>", lambda e, i=it: self.on_cell_click(e, i))
-            w.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
-            w.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
-            w.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
+        """为一条媒体创建一个单元格（自绘圆角卡片 + 缩略图 + 信息行 + 对勾徽标）。
 
-    def _paint_cell(self, it: MediaItem, bg: str, border: str, *,
+        与缓存模式**同一套画法**：卡片是 Canvas 上的**圆角多边形**（Frame 只能画
+        直角），因此圆角、底色、描边、圆形徽标、信息行格式两边完全一致。
+        每个单元格是一个固定尺寸的小 Canvas，沿用原有的 grid 布局与滚动结构。
+        """
+        cell = tk.Canvas(self.inner, width=CELL_W, height=CELL_H, bg=BG,
+                         highlightthickness=0, bd=0)
+        # 卡片底：圆角多边形（内缩 1px，2px 描边才不会被画布边缘裁掉）
+        it.card = cell.create_polygon(0, 0, 0, 0, fill=CARD, outline=CARD,
+                                      width=2, smooth=False)
+        cell.coords(it.card, *rounded_pts(1, 1, CELL_W - 1, CELL_H - 1, CORNER))
+
+        img_cy = (CELL_H - CAPTION_H) // 2
+        it.img = cell.create_image(CELL_W // 2, img_cy, anchor="center")
+        it.img_txt = cell.create_text(CELL_W // 2, img_cy, anchor="center",
+                                      text=t("cell.loading"), fill=SUB,
+                                      font=(FONT, 9))
+        # 信息行：与缓存模式同格式、同字号（"MM-DD HH:MM  ·  大小"）
+        it.info = cell.create_text(
+            CELL_W // 2, CELL_H - 13, anchor="center", fill=SUB, font=(FONT, 9),
+            text=f"{it.date:%m-%d %H:%M}  ·  {human_size(it.size)}")
+        # 选中徽标：右上角「底色外圈 + 强调色圆底 + 白勾」，与缓存模式同位置同形状
+        r, ring = 11, 3
+        cx, cy = CELL_W - r - 7, r + 7
+        it.badge_ring = cell.create_oval(cx - r - ring, cy - r - ring,
+                                         cx + r + ring, cy + r + ring,
+                                         fill=BG, outline="", state="hidden")
+        it.badge = cell.create_oval(cx - r, cy - r, cx + r, cy + r,
+                                    fill=ACCENT, outline="", state="hidden")
+        it.badge_txt = cell.create_text(cx, cy, anchor="center", text="✓",
+                                        fill="#ffffff", font=(FONT, 11, "bold"),
+                                        state="hidden")
+        it.cell = cell
+        cell.bind("<Button-1>", lambda e, i=it: self.on_cell_click(e, i))
+        cell.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
+        cell.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
+        cell.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
+        # 滚轮落在卡片上时也能滚动（画布仅在指针进入空白区时才 bind_all）
+        cell.bind("<MouseWheel>", self._on_wheel)
+
+    def _paint_cell(self, it: MediaItem, fill: str, outline: str, *,
                     badge: bool = False) -> None:
-        """给一个单元格的各部件统一上色（悬停 / 选中 / 常态共用，避免漏改某一块）。"""
-        for w in (it.cell, it.img_label, it.info_label):
-            w.configure(bg=bg)
-        it.cell.configure(highlightbackground=border)
-        it.mark_label.configure(bg=ACCENT if badge else bg)
+        """给卡片底统一上色并切换徽标（悬停 / 选中 / 常态共用，避免漏改）。"""
+        it.cell.itemconfigure(it.card, fill=fill, outline=outline)
+        state = "normal" if badge else "hidden"
+        for item in (it.badge_ring, it.badge, it.badge_txt):
+            it.cell.itemconfigure(item, state=state)
 
     def hover_item(self, it: MediaItem, on: bool) -> None:
         """鼠标进出单元格时切换底色（已选中项保持选中底色）。"""
         if it.selected:
             return
-        self._paint_cell(it, CARD_HOVER if on else CARD, CARD)
+        edge = CARD_HOVER if on else CARD
+        self._paint_cell(it, edge, edge)
 
     def set_selected(self, it: MediaItem, value: bool) -> None:
         """设置单条选中态并刷新其外观（单击 / 连选 / 全选 / 反选共用）。
 
-        与缓存模式**同一套视觉**：卡片铺淡蓝底 + 强调色描边 + 右上角对勾徽标；
-        缩略图本身保持中性底，不再用亮色铺满整卡把画面压掉。
+        与缓存模式**同一套视觉**：圆角卡片铺淡蓝底 + 强调色描边 + 右上角圆形对勾
+        徽标；缩略图本身保持中性底，不用亮色铺满整卡把画面压掉。
         """
         if it.selected == value:
             return
         it.selected = value
         self._paint_cell(it, CARD_SEL if value else CARD,
                          ACCENT if value else CARD, badge=value)
-        it.mark_label.configure(text="✓" if value else "")
 
     def toggle_item(self, it: MediaItem) -> None:
         """单击切换该媒体的选中态并刷新计数。"""
@@ -1353,14 +1373,17 @@ class App(LangMixin):
         _, mid, img = msg
         it = self.by_id.get(mid)
         self._thumb_done += 1
-        if it is not None and it.img_label is not None:
+        if it is not None and it.cell is not None:
             if img is None:
                 it.thumb_failed = True
-                it.img_label.configure(text=t("cell.no_preview"), image="")
+                it.cell.itemconfigure(it.img, image="", state="hidden")
+                it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"),
+                                      state="normal")
             else:
                 it.thumb = img
                 it.photo = ImageTk.PhotoImage(img)
-                it.img_label.configure(image=it.photo, text="")
+                it.cell.itemconfigure(it.img, image=it.photo, state="normal")
+                it.cell.itemconfigure(it.img_txt, state="hidden")
         if self._thumb_total:
             self.set_status("online.status.thumbs",
                             done=self._thumb_done, total=self._thumb_total)
