@@ -1,5 +1,22 @@
 # 变更记录
 
+## 2026-10-14（功能：保存路径增加「打开文件夹」，并抽出公共实现）
+
+### 现象
+- API 模式「保存到」一行只有「浏览」，**没有打开目录的入口**；缓存模式有此功能。
+
+### 修改
+- 新增 `ui_kit.open_folder()`（跨平台：Windows `startfile` / macOS `open` / Linux `xdg-open`），返回是否成功；
+  缓存模式的 `on_open_dir` 改为调用它（行为不变：失败仍回退为复制路径到剪贴板）。
+- API 模式「保存到」一行新增**「打开文件夹」按钮**（`App.on_open_dir`）；失败时把路径复制到剪贴板并在日志区提示。
+- 「打开目录」按钮文案收敛为共用键 `common.open_dir`（同一按钮同一文案），删除重复键 `cache.bottom.open_dir`；
+  新增 `online.dialog.no_out_dir`、`online.log.path_copied`（中英同步）。
+
+### 验证
+- `test_gui_online` 新增 2 条：打开失败回退复制路径；目录不存在时提示且不尝试打开。
+- `test_gui_cache` 的打开目录用例改为对 `ui_kit.open_folder` 打桩（与实现解耦）。
+- `ruff` / `mypy`（6 files）全绿；`pytest` **67 passed**。
+
 ## 2026-10-14（修复：API 模式双击缩略图改为「先确认再下载」）
 
 ### 现象

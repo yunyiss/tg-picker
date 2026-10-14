@@ -19,7 +19,6 @@ import concurrent.futures
 import os
 import queue
 import shutil
-import subprocess
 import sys
 import threading
 import time
@@ -811,7 +810,7 @@ class CacheApp(LangMixin):
             side="left", padx=(0, 8))
         # 打开目录：用系统文件管理器打开「保存到」目录（失败时回退复制路径）
         self.b_open = self._T(ttk.Button(r2, command=self.on_open_dir),
-                              "cache.bottom.open_dir")
+                              "common.open_dir")
         self.b_open.pack(side="left", padx=(0, 8))
         self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
                                  command=self.on_save)
@@ -1739,17 +1738,10 @@ class CacheApp(LangMixin):
         if not path.is_dir():
             messagebox.showwarning(_app_title(), t("cache.dialog.no_out_dir"))
             return
-        try:
-            if sys.platform == "win32":
-                os.startfile(path)  # 打开目录是有意的用户动作
-            elif sys.platform == "darwin":
-                subprocess.Popen(["open", str(path)])
-            else:
-                subprocess.Popen(["xdg-open", str(path)])
-        except OSError:
-            self._copy_path_fallback(path)
-        else:
+        if ui_kit.open_folder(path):
             self.set_status("cache.status.opened_dir", path=path)
+        else:
+            self._copy_path_fallback(path)
 
     def _copy_path_fallback(self, path: Path) -> None:
         """打开目录失败时的兜底：把绝对路径写入剪贴板并提示。"""

@@ -142,6 +142,30 @@ def gear_workers(key: str, info: HardwareInfo, recommended: int | None = None) -
 
 
 # ---------------------------------------------------------------------------
+# 系统集成：用文件管理器打开目录
+# ---------------------------------------------------------------------------
+def open_folder(path: Path) -> bool:
+    """用系统文件管理器打开目录；成功返回 ``True``。
+
+    失败（本机对 shell open 受限、无 ``xdg-open`` 等）返回 ``False``，
+    由调用方决定兜底方式（缓存挑选器会回退为把绝对路径写入剪贴板）。
+
+    打开目录是**有意的用户动作**，故直接交给系统外壳执行。
+    """
+    path = Path(path)
+    try:
+        if sys.platform == "win32":
+            os.startfile(path)
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(path)])
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
+    except OSError:
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
 # 日志：写入文件（带轮转），并在无控制台时接管 stdout / stderr
 # ---------------------------------------------------------------------------
 LOG_NAME = "tg_picker"              # 三个入口共用同一个日志器

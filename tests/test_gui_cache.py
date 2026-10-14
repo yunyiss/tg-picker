@@ -196,8 +196,8 @@ def test_open_dir_falls_back_to_clipboard_when_unavailable(tk_root, tmp_path, mo
     def blocked(*_args, **_kwargs):
         raise OSError("shell open is blocked on this machine")
 
-    monkeypatch.setattr(cp.os, "startfile", blocked, raising=False)
-    monkeypatch.setattr(cp.subprocess, "Popen", blocked)
+    monkeypatch.setattr(cp.ui_kit.os, "startfile", blocked, raising=False)
+    monkeypatch.setattr(cp.ui_kit.subprocess, "Popen", blocked)
 
     app.on_open_dir()
     assert app.root.clipboard_get() == str(out), "未回退复制绝对路径"

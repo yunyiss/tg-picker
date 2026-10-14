@@ -774,18 +774,20 @@ class App(LangMixin):
         self.e_out.insert(0, str(DEFAULT_OUT))
         self.e_out.grid(row=0, column=1, sticky="we", padx=(4, 6))
         self._T(ttk.Button(f, command=self.on_pick_dir), "common.browse").grid(
-            row=0, column=2, padx=(0, 12))
+            row=0, column=2, padx=(0, 6))
+        self._T(ttk.Button(f, command=self.on_open_dir), "common.open_dir").grid(
+            row=0, column=3, padx=(0, 12))
         self._T(ttk.Button(f, command=lambda: self.set_all(True)), "common.select_all").grid(
-            row=0, column=3, padx=(0, 4))
+            row=0, column=4, padx=(0, 4))
         self._T(ttk.Button(f, command=lambda: self.set_all(False)), "common.clear_sel").grid(
-            row=0, column=4, padx=(0, 12))
+            row=0, column=5, padx=(0, 12))
         # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
         self.b_dl = ttk.Button(f, text=t("online.download_btn", n=0), style="Accent.TButton",
                                command=self.on_download)
-        self.b_dl.grid(row=0, column=5, padx=(0, 8))
+        self.b_dl.grid(row=0, column=6, padx=(0, 8))
         self.b_cancel = self._T(ttk.Button(f, command=self.on_cancel, state="disabled"),
                                 "common.cancel")
-        self.b_cancel.grid(row=0, column=6)
+        self.b_cancel.grid(row=0, column=7)
         f.columnconfigure(1, weight=1)
 
         f2 = ttk.Frame(self.root, padding=(12, 0, 12, 6))
@@ -903,10 +905,25 @@ class App(LangMixin):
 
     def on_pick_dir(self) -> None:
         """选择下载输出目录并回填到输入框。"""
-        chosen = filedialog.askdirectory(initialdir=self.e_out.get() or str(APP_DIR))
+        chosen = filedialog.askdirectory(initialdir=self.e_out.get() or str(DEFAULT_OUT))
         if chosen:
             self.e_out.delete(0, "end")
             self.e_out.insert(0, chosen)
+
+    def on_open_dir(self) -> None:
+        """用系统文件管理器打开「保存到」目录（失败则把路径复制到剪贴板）。"""
+        path = Path(self.e_out.get().strip() or str(DEFAULT_OUT))
+        if not path.is_dir():
+            messagebox.showwarning(_app_title(), t("online.dialog.no_out_dir"))
+            return
+        if ui_kit.open_folder(path):
+            return
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(str(path))
+        except tk.TclError:
+            pass
+        self.log(t("online.log.path_copied", path=path))
 
     # ---------- 缩略图网格 ----------
     def add_item_cell(self, it: MediaItem) -> None:

@@ -149,3 +149,35 @@ def test_online_double_click_confirms_before_download(tk_root, monkeypatch):
     app.preview_item(item)
     assert submitted == [i18n.t("online.task.preview")], submitted
     app._on_close()
+
+
+@pytest.mark.gui
+def test_online_open_dir_falls_back_to_clipboard(tk_root, tmp_path, monkeypatch):
+    """打开目录失败时回退：把绝对路径写入剪贴板（不弹错、不崩）。"""
+    app = tp.App(tk_root)
+    out = tmp_path / "picked"
+    out.mkdir()
+    app.e_out.delete(0, "end")
+    app.e_out.insert(0, str(out))
+    monkeypatch.setattr(tp.ui_kit, "open_folder", lambda p: False)
+    app.on_open_dir()
+    assert app.root.clipboard_get() == str(out), "未回退复制绝对路径"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_online_open_dir_warns_when_folder_missing(tk_root, tmp_path, monkeypatch):
+    """目录不存在时提示先选目录，且不尝试打开。"""
+    app = tp.App(tk_root)
+    app.e_out.delete(0, "end")
+    app.e_out.insert(0, str(tmp_path / "does-not-exist"))
+    warns: list[str] = []
+    monkeypatch.setattr(tp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    opened: list[str] = []
+    monkeypatch.setattr(tp.ui_kit, "open_folder",
+                        lambda p: (opened.append(str(p)), True)[1])
+    app.on_open_dir()
+    assert warns, "目录不存在时应弹提示"
+    assert opened == [], "目录不存在时不应尝试打开"
+    app._on_close()
