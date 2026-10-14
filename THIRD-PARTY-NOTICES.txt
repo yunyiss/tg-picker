@@ -1,0 +1,46 @@
+Third-party notices for packaged releases
+=========================================
+
+This file applies to the **distributed build** (`tg-picker-<os>.zip`, produced by
+`packaging/build_app.py`), not to running from source. The tool's own code is MIT
+licensed — see `LICENSE` (which is bundled alongside this file).
+
+--------------------------------------------------------------------------
+1) FFmpeg — trimmed build, LGPL 2.1 or later
+--------------------------------------------------------------------------
+- Bundled file: `ffmpeg` / `ffmpeg.exe`, placed next to the program.
+- Version: FFmpeg 7.1, compiled from the official source tarball with a minimal,
+  decode-only configuration (`--disable-everything`, plus h264/hevc/vp8/vp9/mpeg4
+  decoders, mov/matroska/avi demuxers, image2/image2pipe muxers, and the scale
+  filter). It is used only to extract a single video frame for thumbnails.
+- License: LGPL v2.1 or later. The build does **not** enable GPL components.
+  Full text: https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html
+- Corresponding source: https://ffmpeg.org/download.html (release 7.1)
+- Reproducing / modifying the bundled binary: the exact configure recipe and the
+  build script used are part of this project's repository —
+  `packaging/build_ffmpeg.sh` (per-platform CI build:
+  `.github/workflows/release.yml`). With the sources above and that recipe the
+  identical binary can be rebuilt; the recipe can also be reused to relink the
+  library against a modified FFmpeg.
+- Source requests: https://github.com/yunyiss/tg-picker/issues
+
+--------------------------------------------------------------------------
+2) tg-scoop — MIT
+--------------------------------------------------------------------------
+- Bundled directory: `_vendor/tg_scoop/` (cache decryption core, verbatim copy).
+- Its license text ships inside that directory as `_vendor/tg_scoop/LICENSE`.
+- Upstream: https://github.com/GarrettFynn/tg-scoop
+
+--------------------------------------------------------------------------
+3) Python runtime and third-party libraries
+--------------------------------------------------------------------------
+The bundle contains the Python runtime plus the libraries below (see
+`requirements.txt`). License metadata as reported by PyPI at build time:
+
+- Pillow — MIT-CMU
+- pycryptodome — BSD, Public Domain
+- Telethon — MIT
+- PySocks — BSD
+- python-socks — Apache-2.0
+
+License texts are available from each project's PyPI page / repository.

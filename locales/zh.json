@@ -91,6 +91,7 @@
   "cache.status.path_copied": "无法打开目录，已复制路径到剪贴板：{path}",
   "cache.status.saving": "保存中 {done}/{total} · {name}",
   "cache.status.save_done": "保存完成：成功 {ok}，失败 {fail}",
+  "cache.status.save_done_failed": "保存完成：成功 {ok}，失败 {fail}（失败原因见日志文件）",
   "cache.status.err": "{title}：{detail}",
   "cache.status.no_media": "没解析出媒体 · 先在 Telegram Desktop 里查看/播放，再点「重新扫描」",
 

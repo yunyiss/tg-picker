@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import os
 import queue
 import shutil
@@ -77,6 +78,10 @@ INDEX_PATH = DATA_DIR / "cache_index.json"
 VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 EXPORT_DIR = app_paths.export_dir()      # 默认导出目录：与 API 模式共用同一个
 THUMB = cs.THUMB
+
+# 日志：三个入口共用同一个 logger（输出落到数据目录的 logs/，见 ui_kit.enable_file_log）。
+# 界面只报"成功 N / 失败 M"，逐条失败的原因必须留痕，否则用户无从排查。
+_log = logging.getLogger(ui_kit.LOG_NAME)
 
 
 def _app_title() -> str:
@@ -214,8 +219,11 @@ def save_items(items, out_dir: Path, tdata: Path, passcode: str,
         try:
             export_one(it, out_dir, tdata, passcode, by_date=by_date, reader=reader)
             ok += 1
-        except Exception:
+        except Exception as exc:
             fail += 1
+            # 逐条留痕：状态栏只有汇总数字，这里记下"是哪条、为什么失败"
+            _log.warning("保存失败：%s：%s: %s",
+                         it.name, exc.__class__.__name__, exc)
         if progress_cb is not None:
             progress_cb(i, total, it.name)
     return ok, fail
@@ -1934,7 +1942,9 @@ class CacheApp(LangMixin):
         self.busy = False
         self.set_busy(False)
         self._hide_progress()
-        self.set_status("cache.status.save_done", ok=ok, fail=fail)
+        # 有失败时提示去看日志文件（逐条原因写在里面）
+        key = "cache.status.save_done_failed" if fail else "cache.status.save_done"
+        self.set_status(key, ok=ok, fail=fail)
         save_config({"out_dir": str(out), "kind": self.v_kind.get(),
                      "sort": self.v_sort.get(), "by_date": bool(self.v_bydate.get()),
                      "formats": [e for e, v in self.v_formats.items() if v.get()]})

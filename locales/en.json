@@ -91,6 +91,7 @@
   "cache.status.path_copied": "Couldn't open the folder; path copied to clipboard: {path}",
   "cache.status.saving": "Saving {done}/{total} · {name}",
   "cache.status.save_done": "Saved: {ok} succeeded, {fail} failed",
+  "cache.status.save_done_failed": "Saved: {ok} succeeded, {fail} failed (see the log file for details)",
   "cache.status.err": "{title}: {detail}",
   "cache.status.no_media": "No media decoded · open or play the content in Telegram Desktop first, then click \"Rescan\"",
 

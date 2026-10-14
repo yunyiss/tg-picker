@@ -1,5 +1,37 @@
 # 变更记录
 
+## 2026-10-14（交付前审查修复·第二批：发布合规 + 保存失败留痕 + 扫描限流）
+
+### F4 · 发布包补齐第三方许可声明（合规）
+- **现象**：`build_app.py` 只把 `locales` / `_vendor` / 裁剪版 ffmpeg 打进包——`_vendor` 里 tg_scoop 的
+  MIT LICENSE 跟着走了，但**独立分发的 ffmpeg（LGPL 2.1+）没有任何声明**，对外挂 Release 时是实打实的合规缺口。
+- **修改**：新增 `THIRD-PARTY-NOTICES.txt`（写明 ffmpeg 版本与许可、源码地址、以及"用仓库里的
+  `packaging/build_ffmpeg.sh` 配方可重建同一份二进制"，并列出各运行时依赖的许可）；`build_app.py` 里
+  `--add-data` 把 `LICENSE` 与它一并打进包；README 中/英的文件清单表各补一行。
+- **验证**：**实跑了一次打包**（用占位文件充当 ffmpeg），确认产物里确实带上了 `LICENSE` /
+  `THIRD-PARTY-NOTICES.txt` / `_vendor/tg_scoop/LICENSE` / `locales`（PyInstaller 6 在 onedir 下把
+  它们放在 `_internal/`）；另加 `tests/test_packaging.py` 做源码级断言。构建产物已清理。
+
+### F3 · 缓存模式逐条保存失败留痕
+- **现象**：`save_items` 里是 `except Exception: fail += 1`，状态栏只给「成功 N / 失败 M」，
+  **哪一条失败、为什么**（磁盘满 / 无权限 / 文件被占用）在界面与日志里都查不到。
+- **修改**：逐条失败写进日志（三个入口共用的 logger → 数据目录 `logs/`）；有失败时状态栏用新键
+  `cache.status.save_done_failed` 提示"（失败原因见日志文件）"，无失败时仍是原句（保持与 API 模式同句）。
+- **验证**：新增用例用 `caplog` 断言"条目名 + 异常类型 + 原因"都写进了日志。
+
+### M5 · 扫描在途任务限流（内存峰值）
+- **现象**：`prepare` 里 `{idx: pool.submit(...) for idx in jobs}` 一次性提交全部待办，超大缓存会瞬间创建
+  成千上万个 future——线程数虽受 `max_workers` 限制，但 future 与任务闭包本身就要占内存。
+- **修改**：抽出 `_JobWindow` 滑动窗口：预填 `workers × 4` 个，之后**消费一个补一个**，在途数量恒定有界，
+  并保证"下一个待消费的下标一定在窗口里"这条不变式。
+- **验证**：新增直接盯住窗口性质的用例（桩线程池断言"预填只填满窗口""在途数 ≤ 窗口"）；
+  并依赖既有的 `test_parallel_scan_matches_serial` 保证结果与串行**完全一致**。
+- **备注**：这次改动一度让 `prepare` 撞上 ruff 的 `C901`（复杂度 18 > 15）；把窗口逻辑抽成小类后回到限值内
+  ——这也正是"抽出去"的附带好处。
+
+### 验证
+- `ruff` / `mypy`（6 files）全绿；`pytest` **94 passed**（新增 4 条：打包结构 2 条、保存失败留痕、窗口性质）。
+
 ## 2026-10-14（交付前审查修复：串图竞态 + 凭据/日志隐私加固 + API 退出收尾）
 
 ### M1 · 缓存模式缩略图「串图」竞态（正确性）

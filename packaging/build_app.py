@@ -60,6 +60,10 @@ def main() -> int:
         "--add-data", f"{ROOT / 'locales'}{sep}locales",
         "--add-data", f"{ROOT / '_vendor'}{sep}_vendor",
         "--add-data", f"{ff}{sep}.",
+        # 许可与第三方声明随包分发：内置的裁剪版 ffmpeg 是 LGPL，对外发布时必须
+        # 同时给出许可证文本与"如何获取/重建对应源码"的说明（见 THIRD-PARTY-NOTICES.txt）
+        "--add-data", f"{ROOT / 'LICENSE'}{sep}.",
+        "--add-data", f"{ROOT / 'THIRD-PARTY-NOTICES.txt'}{sep}.",
     ]
     for h in HIDDEN:
         cmd += ["--hidden-import", h]

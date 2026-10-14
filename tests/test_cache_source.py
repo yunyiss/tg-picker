@@ -157,3 +157,40 @@ def test_prepare_progress_callback_passes_counts_only(tdata_dir: Path, tmp_path:
     assert all(len(a) == 2 for a in seen), (
         f"进度回调应只传 (done, total)，实际参数个数：{sorted({len(a) for a in seen})}"
     )
+
+
+def test_job_window_never_submits_everything_at_once():
+    """回归（内存峰值）：`_JobWindow` 只能"消费一个补一个"，不得一次性提交全部待办。
+
+    以前是 ``{idx: pool.submit(...) for idx in jobs}``：超大缓存会瞬间创建成千上万个
+    future（线程数虽受 ``max_workers`` 限制，但 future 与任务闭包本身占内存）。这里用
+    桩线程池直接盯住"在途数量 ≤ 窗口大小"这条性质。
+    """
+
+    class _StubFuture:
+        def result(self) -> dict:
+            return {"status": "ok"}
+
+    class _StubPool:
+        def __init__(self) -> None:
+            self.submitted: list[int] = []
+
+        def submit(self, fn, idx: int) -> _StubFuture:
+            self.submitted.append(idx)
+            return _StubFuture()
+
+    jobs = list(range(20))
+    pool = _StubPool()
+    window = cs._JobWindow(pool, lambda i: None, jobs, 4)
+
+    window.fill()
+    assert pool.submitted == [0, 1, 2, 3], (
+        f"预填应恰好填满窗口，而不是一次提交全部：{pool.submitted}"
+    )
+
+    taken = 0
+    for idx in jobs:
+        window.take(idx)
+        taken += 1
+        assert len(pool.submitted) - taken <= 4, "在途任务数不得超过窗口大小"
+    assert pool.submitted == jobs, "最终每个待办都应被提交过"

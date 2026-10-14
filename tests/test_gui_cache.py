@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import io
+import logging
 import threading
 import time
 from pathlib import Path
@@ -407,3 +408,25 @@ def test_stale_thumb_result_must_not_land_on_another_item(tk_root):
     app.on_filter_change()                        # 换列表（改筛选/排序）
     assert app.photo_queue.empty(), "换列表时应清掉在途结果"
     app._on_close()
+
+
+def test_save_items_logs_per_item_failure(tmp_path, caplog):
+    """回归：逐条保存失败必须**留痕**——状态栏只有汇总数字，原因只在日志里。
+
+    以前是 ``except Exception: fail += 1``：用户既不知道是哪一条失败、也不知道
+    为什么（磁盘满 / 无权限 / 文件被占用都一样）。
+    """
+
+    class BoomReader:
+        def decrypt(self, path) -> bytes:
+            raise OSError("磁盘满 / 文件被占用")
+
+    item = _minimal_item("boom")
+    with caplog.at_level(logging.WARNING, logger=ui_kit.LOG_NAME):
+        ok, fail = cp.save_items([item], tmp_path, Path("tdata"), "pw",
+                                 reader=BoomReader())
+
+    assert (ok, fail) == (0, 1)
+    text = caplog.text
+    assert item.name in text, f"日志里应能看出是哪一条失败：{text}"
+    assert "OSError" in text and "磁盘满" in text, f"日志里应带失败原因：{text}"

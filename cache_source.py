@@ -510,6 +510,43 @@ def _process_one(ent: CacheEntry, reader: CacheReader, thumb_dir: Path,
     return {"status": "ok", "kind": kind, "ext": ext, "size": size}
 
 
+class _JobWindow:
+    """把待办任务**限流**地交给线程池：在途数量恒定不超过 ``size``。
+
+    以前是"一次性 submit 全部 jobs"，超大缓存会瞬间创建成千上万个 future；线程数
+    虽然受 ``max_workers`` 限制，但 future 与任务闭包本身就要占内存。这里改成滑动
+    窗口：预填 ``size`` 个，之后**消费一个补一个**，因此不变式始终成立——下一个待
+    消费的下标一定在窗口里。
+    """
+
+    def __init__(self, pool: concurrent.futures.ThreadPoolExecutor,
+                 work, jobs: list[int], size: int) -> None:
+        self._pool = pool
+        self._work = work
+        self._jobs = iter(jobs)
+        self._size = max(1, size)
+        self._pending: dict[int, concurrent.futures.Future] = {}
+
+    def fill(self) -> None:
+        """预填窗口（待办不足就少填几个）。"""
+        while len(self._pending) < self._size and self._spawn():
+            pass
+
+    def take(self, idx: int) -> concurrent.futures.Future:
+        """取出该下标的 future 并立刻补一个新的进窗口（先补再等结果，线程池不空转）。"""
+        fut = self._pending.pop(idx)
+        self._spawn()
+        return fut
+
+    def _spawn(self) -> bool:
+        """提交下一个待办；已无待办返回 False。"""
+        nxt = next(self._jobs, None)
+        if nxt is None:
+            return False
+        self._pending[nxt] = self._pool.submit(self._work, nxt)
+        return True
+
+
 def prepare(
     tdata: Path,
     passcode: str,
@@ -576,8 +613,11 @@ def prepare(
 
     done = 0
     pool = concurrent.futures.ThreadPoolExecutor(max_workers=max(1, workers))
+    # 在途任务限流（滑动窗口，见 _JobWindow）：窗口取 workers 的 4 倍，既压住内存峰值，
+    # 又留足排队深度让线程池不至于饿着。
+    window = _JobWindow(pool, work, jobs, max(1, workers) * 4)
     try:
-        futures = {idx: pool.submit(work, idx) for idx in jobs}
+        window.fill()
         for idx, ent in enumerate(entries):
             if cancel_event is not None and cancel_event.is_set():
                 break
@@ -596,7 +636,7 @@ def prepare(
                 new_index[ent.rel] = carried[idx]
                 stats["skipped"] += 1
             else:
-                out = futures[idx].result()
+                out = window.take(idx).result()
                 status = out["status"]
                 if status == "failed":
                     stats["failed"] += 1

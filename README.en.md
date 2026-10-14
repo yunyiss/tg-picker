@@ -218,6 +218,7 @@ never scrolled past in the client).
 | `pyproject.toml` | Project metadata plus ruff and pytest configuration (dependencies live only in the .txt files) |
 | `tests/` | pytest test suite (see section 8) |
 | `LICENSE` | MIT license + third-party attribution + disclaimer |
+| `THIRD-PARTY-NOTICES.txt` | Third-party notices shipped inside the release: the bundled trimmed FFmpeg's LGPL license, source URL and rebuild recipe |
 | `CHANGELOG.md` | Change log (Chinese) |
 | `README.en.md` | This English document |
 

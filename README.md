@@ -180,6 +180,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `pyproject.toml` | 项目元数据与 ruff、pytest 配置（依赖只在上面的 txt 里声明） |
 | `tests/` | pytest 测试套件（详见「八、开发与测试」） |
 | `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
+| `THIRD-PARTY-NOTICES.txt` | 发布包内第三方声明：内置裁剪版 ffmpeg 的 LGPL 许可、源码地址与重建配方（随包分发） |
 | `CHANGELOG.md` | 变更记录（中文） |
 | `README.en.md` | 本说明的英文版 |
 
