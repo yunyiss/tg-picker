@@ -90,6 +90,9 @@ PUMP_MS = 80         # 消息队列轮询间隔（毫秒）
 # 等待用户填写验证码/密码的上限（秒）。只是"界面已不可用"时的安全网：
 # 没有它，后台协程会永久阻塞在 Event.wait() 上，busy 永不复位。
 PROMPT_TIMEOUT = 300
+# 缩略图并发抓取路数：逐条串行 + 每条 sleep 时，一批 500 条要白等 25 秒。
+# 改为 N 路并发，控速 sleep 放在并发名额**之外**，兼顾速度与服务端温和度。
+THUMB_CONCURRENCY = 3
 
 IMAGE_EXT = {"image/jpeg": ".jpg", "image/png": ".png",
              "image/webp": ".webp", "image/gif": ".gif"}
@@ -582,21 +585,31 @@ class Worker:
         return b""
 
     async def load_thumbs(self, items: list[MediaItem]) -> None:
-        """逐条拉取缩略图并投递给界面；取不到的投 None（界面显示"无预览"）。"""
-        for it in items:
+        """并发拉取缩略图并投递给界面；取不到的投 None（界面显示"无预览"）。
+
+        信号量限制并发路数（``THUMB_CONCURRENCY``），每条仍保留温和节流，但
+        ``sleep`` 放在信号量**之外**——否则每条都要占着名额睡，并发会退化成串行。
+        整批 ``gather`` 等齐后再返回，与调用方（``busy`` 复位）的语义保持一致。
+        """
+        sem = asyncio.Semaphore(THUMB_CONCURRENCY)
+
+        async def one(it: MediaItem) -> None:
             if self.cancel.is_set():
-                break
-            try:
-                data = await self._thumb_bytes(it)
-                if not data:
-                    raise ValueError("无缩略图数据")
-                img = Image.open(io.BytesIO(data))
-                img = img.convert("RGB")
-                img.thumbnail((THUMB, THUMB), Image.LANCZOS)
-                self.post("thumb", it.msg_id, img)
-            except Exception:
-                self.post("thumb", it.msg_id, None)
-            await asyncio.sleep(0.05)  # 温和控速
+                return
+            async with sem:
+                try:
+                    data = await self._thumb_bytes(it)
+                    if not data:
+                        raise ValueError("无缩略图数据")
+                    img = Image.open(io.BytesIO(data))
+                    img = img.convert("RGB")
+                    img.thumbnail((THUMB, THUMB), Image.LANCZOS)
+                    self.post("thumb", it.msg_id, img)
+                except Exception:
+                    self.post("thumb", it.msg_id, None)
+            await asyncio.sleep(0.05)  # 温和控速（不占并发名额）
+
+        await asyncio.gather(*(one(it) for it in items))
 
     # ----- 下载 -----
     async def _download_one(self, it: MediaItem, out_dir: Path) -> Path:
