@@ -75,6 +75,7 @@
   "cache.bottom.save_none": "保存选中",
   "cache.bottom.save_n": "保存选中（{n}）",
 
+  "cache.empty_hint": "暂无内容 · 点「开始扫描」读取本机缓存",
   "cache.status.default": "缩略图已载入 {n}　·　单击选中，Shift+单击连选，双击保存",
   "cache.status.load_done": "读取完成：媒体 {ok} 个{reused}　·　跳过 {skipped}　·　失败 {failed}　·　耗时 {elapsed}s",
   "cache.status.reused": "（复用 {n}）",
@@ -91,13 +92,13 @@
   "cache.status.saving": "保存中 {done}/{total} · {name}",
   "cache.status.save_done": "保存完成：成功 {ok}，失败 {fail}",
   "cache.status.err": "{title}：{detail}",
+  "cache.status.no_media": "没解析出媒体 · 先在 Telegram Desktop 里查看/播放，再点「重新扫描」",
 
   "cache.dialog.no_tdata": "tdata 目录不存在，请检查路径",
   "cache.dialog.need_format": "请至少勾选一种输出类型（要扫描的格式）",
   "cache.dialog.need_passcode_title": "需要密码",
   "cache.dialog.load_failed_title": "读取失败",
   "cache.dialog.save_failed_title": "保存失败",
-  "cache.dialog.no_media": "没有解析出可用的媒体。\n\n请先在 Telegram Desktop 里查看/播放你想保存的内容，再回来点“重新扫描”。",
   "cache.dialog.export_failed": "保存失败：{err}",
   "cache.dialog.confirm_export": "是否把这一条保存到下面这个目录？\n\n{out}\n\n文件名：{name}",
   "cache.dialog.nothing_selected": "还没有选中任何内容\n\n在缩略图上单击即可选中（变蓝打勾）",
@@ -130,6 +131,7 @@
   "online.current_account": "当前账号",
   "online.logged_in": "已登录：{who}",
 
+  "online.empty_hint": "暂无内容 · 填写群/频道后点「加载媒体」",
   "online.status.loaded": "加载 {n} 个媒体，缩略图生成中…",
   "online.status.thumbs": "缩略图 {done}/{total}",
   "online.status.ready_hint": "就绪：单击选中，Shift+单击连选，双击保存，然后点「保存选中」",

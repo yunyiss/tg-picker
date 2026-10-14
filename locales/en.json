@@ -75,6 +75,7 @@
   "cache.bottom.save_none": "Save selected",
   "cache.bottom.save_n": "Save selected ({n})",
 
+  "cache.empty_hint": "Nothing here yet · click \"Start scan\" to read the local cache",
   "cache.status.default": "Thumbnails loaded {n} · click to select, Shift+click for range, double-click to save",
   "cache.status.load_done": "Loaded {ok} media{reused} · skipped {skipped} · failed {failed} · {elapsed}s",
   "cache.status.reused": " ({n} reused)",
@@ -91,13 +92,13 @@
   "cache.status.saving": "Saving {done}/{total} · {name}",
   "cache.status.save_done": "Saved: {ok} succeeded, {fail} failed",
   "cache.status.err": "{title}: {detail}",
+  "cache.status.no_media": "No media decoded · open or play the content in Telegram Desktop first, then click \"Rescan\"",
 
   "cache.dialog.no_tdata": "tdata folder not found. Please check the path.",
   "cache.dialog.need_format": "Please check at least one output type (format to scan)",
   "cache.dialog.need_passcode_title": "Passcode required",
   "cache.dialog.load_failed_title": "Load failed",
   "cache.dialog.save_failed_title": "Save failed",
-  "cache.dialog.no_media": "No usable media could be decoded.\n\nOpen or play the content you want in Telegram Desktop first, then click \"Rescan\".",
   "cache.dialog.export_failed": "Save failed: {err}",
   "cache.dialog.confirm_export": "Save this item to the folder below?\n\n{out}\n\nFile name: {name}",
   "cache.dialog.nothing_selected": "Nothing is selected yet.\n\nClick a thumbnail to select it (it turns blue with a check).",
@@ -130,6 +131,7 @@
   "online.current_account": "current account",
   "online.logged_in": "Signed in: {who}",
 
+  "online.empty_hint": "Nothing here yet · enter a group/channel and click \"Load media\"",
   "online.status.loaded": "Loaded {n} media, generating thumbnails…",
   "online.status.thumbs": "Thumbnails {done}/{total}",
   "online.status.ready_hint": "Ready: click to select, Shift+click for range, double-click to save, then click \"Save selected\"",

@@ -705,6 +705,8 @@ class App(LangMixin):
         st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
         st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
         st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
+        # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
+        st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
         # 按钮：统一高度、压掉 clam 的立体边框
         st.configure("TButton", font=(FONT, 9), padding=(12, 6),
                      background=BTN, foreground=FG, borderwidth=0, focusthickness=0,
@@ -930,6 +932,24 @@ class App(LangMixin):
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+
+        # 空状态：无内容时在网格区居中显示的内联提示（与缓存模式同一风格）
+        self.l_empty = self._T(
+            ttk.Label(self.canvas, style="Empty.TLabel", justify="center"),
+            "online.empty_hint")
+        self._empty_shown = False
+        self._update_empty_hint()
+
+    def _update_empty_hint(self) -> None:
+        """无内容时显示空状态提示，有内容时隐藏（两种模式同一交互）。"""
+        show = not self.items
+        if show == self._empty_shown:
+            return
+        if show:
+            self.l_empty.place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            self.l_empty.place_forget()
+        self._empty_shown = show
 
     def _build_actions(self) -> None:
         """底部操作区：两行版式，与缓存模式完全一致。
@@ -1295,6 +1315,7 @@ class App(LangMixin):
         self._thumb_total = len(items)
         self._thumb_done = 0
         self.b_more.configure(state="disabled" if exhausted else "normal")
+        self._update_empty_hint()
         if items:
             self.set_status("online.status.loaded", n=len(items))
 

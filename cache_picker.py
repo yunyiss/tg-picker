@@ -419,6 +419,8 @@ class CacheApp(LangMixin):
         st.configure("BarSection.TLabel", background=BAR, foreground=FG,
                      font=(FONT, 11, "bold"))
         st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
+        # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
+        st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
 
     @staticmethod
     def _style_buttons(st: ttk.Style) -> None:
@@ -850,6 +852,24 @@ class CacheApp(LangMixin):
         self.canvas.bind("<Button-4>", lambda e: self._scroll_units(-3))
         self.canvas.bind("<Button-5>", lambda e: self._scroll_units(3))
 
+        # 空状态：无内容时在网格区居中显示的内联提示（与 API 模式同一风格）
+        self.l_empty = self._T(
+            ttk.Label(self.canvas, style="Empty.TLabel", justify="center"),
+            "cache.empty_hint")
+        self._empty_shown = False
+        self._update_empty_hint()
+
+    def _update_empty_hint(self) -> None:
+        """无内容时显示空状态提示，有内容时隐藏（两种模式同一交互）。"""
+        show = not self.items
+        if show == self._empty_shown:
+            return
+        if show:
+            self.l_empty.place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            self.l_empty.place_forget()
+        self._empty_shown = show
+
     def _build_statusbar(self) -> None:
         # 状态栏底色与 API 模式一致（BAR）；状态在右、进度在左
         wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 7, 16, 7))
@@ -1162,6 +1182,7 @@ class CacheApp(LangMixin):
         网格整体水平居中，消除右侧留白不均匀的问题；卡片之间保留
         GAP 间隙（CARD_* 与 CELL_* 分离），滚动时露出内容区底色形成分格。
         """
+        self._update_empty_hint()
         if not self.items:
             for cell in self.cell_pool:
                 self._hide_cell(cell)
@@ -1887,7 +1908,8 @@ class CacheApp(LangMixin):
         )
         save_config({"tdata": str(tdata)})
         if not entries:
-            messagebox.showinfo(_app_title(), t("cache.dialog.no_media"))
+            # 不再弹窗：网格区已有内联空态提示，这里只补"怎样让缓存里有内容"的指引
+            self.set_status("cache.status.no_media")
 
     def _msg_load_error(self, msg: tuple) -> None:
         """读取/保存失败：弹错误框并复位忙碌态（标题走语言键）。"""
