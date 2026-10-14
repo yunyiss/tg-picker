@@ -1,6 +1,6 @@
 # 变更记录
 
-## 2026-10-14（交付前审查修复·第三批：缩略图并发）
+## 2026-10-14（交付前审查修复·第三批：缩略图并发 + 领域逻辑收敛）
 
 ### M4 · 在线模式缩略图抓取退化为串行（性能）
 - **现象**：`Worker.load_thumbs` 逐条串行，且每条末尾 `await asyncio.sleep(0.05)` 温和控速；
@@ -9,6 +9,16 @@
   放在信号量之外**——否则每条都占着并发名额睡，并发会退化成串行。整批 `asyncio.gather` 等齐后
   再返回，`busy` 复位的语义保持不变。
 - **验证**：`ruff` / `mypy` / `pytest` 全绿（并发只影响耗时，不改结果与取消语义）。
+
+### F5 · 领域逻辑从 GUI 模块收敛到 cache_source（可维护性）
+- **现象**：`MediaItem` / `save_items` / `export_one` 属于「缓存媒体」的领域逻辑，却住在 GUI 模块
+  `cache_picker.py` 里、与 Tk 代码混在一起；纯逻辑测试（保存/命名/去重）不得不 `import cache_picker`，
+  连带拉起整个界面模块。
+- **修改**：把三者搬到 `cache_source.py`（`_log` 与 `unique_path` 随之到位，逐条失败留痕逻辑原样保留）；
+  `cache_picker` 改为 `from cache_source import MediaItem, export_one, save_items` 再导出——**所有调用点
+  与既有测试（`cp.MediaItem` / `cp.save_items`）零改动**，`cache_picker` 里随之清掉 `logging` / `dataclass`
+  / `unique_path` 等已无引用的导入。
+- **验证**：`ruff` / `mypy`（6 files，覆盖范围不变）/ `pytest` 全绿。
 
 ### 验证
 - `ruff` / `mypy`（6 files）全绿；`pytest` **94 passed**。〔注：`test_tdata_is_read_only` 依赖真实

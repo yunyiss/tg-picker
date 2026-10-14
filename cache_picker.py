@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import concurrent.futures
-import logging
 import os
 import queue
 import shutil
@@ -26,7 +25,6 @@ import time
 import tkinter as tk
 import traceback
 from collections import OrderedDict
-from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -39,6 +37,7 @@ import firstrun
 import i18n
 import ui_kit
 import ui_style
+from cache_source import MediaItem, export_one, save_items
 from i18n import t
 from ui_kit import (
     FONT,
@@ -47,7 +46,6 @@ from ui_kit import (
     human_size,
     recommended_workers,
     rounded_pts,
-    unique_path,
 )
 from ui_lang import LangMixin
 from ui_style import (
@@ -78,10 +76,6 @@ INDEX_PATH = DATA_DIR / "cache_index.json"
 VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 EXPORT_DIR = app_paths.export_dir()      # 默认导出目录：与 API 模式共用同一个
 THUMB = cs.THUMB
-
-# 日志：三个入口共用同一个 logger（输出落到数据目录的 logs/，见 ui_kit.enable_file_log）。
-# 界面只报"成功 N / 失败 M"，逐条失败的原因必须留痕，否则用户无从排查。
-_log = logging.getLogger(ui_kit.LOG_NAME)
 
 
 def _app_title() -> str:
@@ -149,39 +143,8 @@ PUMP_MS = 40              # 消息队列轮询间隔（毫秒）
 assert 8 + IMG_BOX + 6 + 17 + 6 <= CARD_H, "CARD_H 容不下图片与信息行"
 
 
-@dataclass
-class MediaItem:
-    """网格中的一条**缓存**媒体（对应一个 `Tdata` 文件）。
-
-    与在线挑选器的 ``tg_picker.MediaItem`` 是同一概念、字段不同：
-    这里的数据来自已解密的本地缓存，故只包一层 :class:`cache_source.CacheEntry`。
-    """
-
-    entry: cs.CacheEntry
-    name: str = ""
-
-    def __post_init__(self) -> None:
-        if not self.name:
-            self.name = cs.default_cache_name(self.entry)
-
-    @property
-    def kind(self) -> str:
-        """媒体类型：``image`` / ``video``。"""
-        return self.entry.kind
-
-    @property
-    def size(self) -> int:
-        """明文大小（字节）；未知时回退到加密文件大小。"""
-        return self.entry.size or self.entry.enc_size
-
-    @property
-    def mtime(self) -> float:
-        """缓存文件的修改时间（用作"拍摄/接收时间"的近似）。"""
-        return self.entry.mtime
-
-
 # ---------------------------------------------------------------------------
-# 读取与保存（纯函数，便于自检）
+# 读取缓存（纯函数，便于自检；每条的挑选/保存见 cache_source）
 # ---------------------------------------------------------------------------
 def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None,
                exts: tuple[str, ...] | None = None, workers: int = 1):
@@ -201,56 +164,6 @@ def load_cache(tdata: Path, passcode: str, progress_cb=None, cancel_event=None,
         exts=exts,
         workers=workers,
     )
-
-
-def save_items(items, out_dir: Path, tdata: Path, passcode: str,
-               by_date: bool = False, progress_cb=None,
-               cancel_event=None, reader: cs.CacheReader | None = None):
-    """解密选中项并写出到 out_dir。返回 (成功, 失败)。"""
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    if reader is None:
-        reader = cs.get_reader(tdata, passcode)
-    ok = fail = 0
-    total = len(items)
-    for i, it in enumerate(items, 1):
-        if cancel_event is not None and cancel_event.is_set():
-            break
-        try:
-            export_one(it, out_dir, tdata, passcode, by_date=by_date, reader=reader)
-            ok += 1
-        except Exception as exc:
-            fail += 1
-            # 逐条留痕：状态栏只有汇总数字，这里记下"是哪条、为什么失败"
-            _log.warning("保存失败：%s：%s: %s",
-                         it.name, exc.__class__.__name__, exc)
-        if progress_cb is not None:
-            progress_cb(i, total, it.name)
-    return ok, fail
-
-
-def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
-               by_date: bool = False, reader: cs.CacheReader | None = None) -> Path:
-    """把一条缓存媒体解密并导出到 ``out_dir``，返回落盘路径。
-
-    重名时走 :func:`unique_path` 追加序号，绝不覆盖已有文件；落盘后把时间戳
-    对齐到缓存文件的修改时间，方便按日期整理。``by_date=True`` 时再按
-    ``YYYY-MM-DD`` 分子目录（与「保存选中」同一套规则）。
-    """
-    out_dir = Path(out_dir)
-    target_dir = out_dir
-    if by_date:
-        target_dir = out_dir / datetime.fromtimestamp(it.mtime).strftime("%Y-%m-%d")
-    target_dir.mkdir(parents=True, exist_ok=True)
-    if reader is None:
-        reader = cs.get_reader(tdata, passcode)
-    dest = unique_path(target_dir / it.name)
-    dest.write_bytes(reader.decrypt(it.entry.cache_path))
-    try:
-        os.utime(dest, (it.mtime, it.mtime))
-    except OSError:
-        pass
-    return dest
 
 
 def cache_artifacts() -> list[Path]:

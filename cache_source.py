@@ -20,6 +20,7 @@ import concurrent.futures
 import hashlib
 import io
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -32,9 +33,14 @@ from pathlib import Path
 from PIL import Image, ImageFile
 
 from i18n import t
+from ui_kit import LOG_NAME, unique_path
 
 # 缓存里可能存在"只缓存了一部分"的媒体，允许截断解码以尽量出图
 ImageFile.LOAD_TRUNCATED_IMAGES = True
+
+# 日志：三个入口共用同一个 logger（输出落到数据目录的 logs/，见 ui_kit.enable_file_log）。
+# 界面只报"成功 N / 失败 M"，逐条失败的原因必须留痕，否则用户无从排查。
+_log = logging.getLogger(LOG_NAME)
 
 THUMB = 140
 HEAD_BYTES = 64 * 1024          # 索引阶段嗅探时解密的前缀长度
@@ -670,3 +676,87 @@ def default_cache_name(ent: CacheEntry) -> str:
     when = datetime.fromtimestamp(ent.mtime)
     short = (ent.thumb_key or hashlib.md5(ent.rel.encode()).hexdigest())[:8]
     return f"tg_{when:%Y%m%d_%H%M%S}_{short}{ent.ext or '.bin'}"
+
+
+# ---------------------------------------------------------------------------
+# 挑选项与保存（领域逻辑，从 GUI 模块 cache_picker 收敛到此，便于自检与复用）
+# ---------------------------------------------------------------------------
+@dataclass
+class MediaItem:
+    """网格中的一条**缓存**媒体（对应一个 `Tdata` 文件）。
+
+    与在线挑选器的 ``tg_picker.MediaItem`` 是同一概念、字段不同：
+    这里的数据来自已解密的本地缓存，故只包一层 :class:`CacheEntry`。
+    """
+
+    entry: CacheEntry
+    name: str = ""
+
+    def __post_init__(self) -> None:
+        if not self.name:
+            self.name = default_cache_name(self.entry)
+
+    @property
+    def kind(self) -> str:
+        """媒体类型：``image`` / ``video``。"""
+        return self.entry.kind
+
+    @property
+    def size(self) -> int:
+        """明文大小（字节）；未知时回退到加密文件大小。"""
+        return self.entry.size or self.entry.enc_size
+
+    @property
+    def mtime(self) -> float:
+        """缓存文件的修改时间（用作"拍摄/接收时间"的近似）。"""
+        return self.entry.mtime
+
+
+def save_items(items, out_dir: Path, tdata: Path, passcode: str,
+               by_date: bool = False, progress_cb=None,
+               cancel_event=None, reader: CacheReader | None = None):
+    """解密选中项并写出到 out_dir。返回 (成功, 失败)。"""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if reader is None:
+        reader = get_reader(tdata, passcode)
+    ok = fail = 0
+    total = len(items)
+    for i, it in enumerate(items, 1):
+        if cancel_event is not None and cancel_event.is_set():
+            break
+        try:
+            export_one(it, out_dir, tdata, passcode, by_date=by_date, reader=reader)
+            ok += 1
+        except Exception as exc:
+            fail += 1
+            # 逐条留痕：状态栏只有汇总数字，这里记下"是哪条、为什么失败"
+            _log.warning("保存失败：%s：%s: %s",
+                         it.name, exc.__class__.__name__, exc)
+        if progress_cb is not None:
+            progress_cb(i, total, it.name)
+    return ok, fail
+
+
+def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
+               by_date: bool = False, reader: CacheReader | None = None) -> Path:
+    """把一条缓存媒体解密并导出到 ``out_dir``，返回落盘路径。
+
+    重名时走 :func:`unique_path` 追加序号，绝不覆盖已有文件；落盘后把时间戳
+    对齐到缓存文件的修改时间，方便按日期整理。``by_date=True`` 时再按
+    ``YYYY-MM-DD`` 分子目录（与「保存选中」同一套规则）。
+    """
+    out_dir = Path(out_dir)
+    target_dir = out_dir
+    if by_date:
+        target_dir = out_dir / datetime.fromtimestamp(it.mtime).strftime("%Y-%m-%d")
+    target_dir.mkdir(parents=True, exist_ok=True)
+    if reader is None:
+        reader = get_reader(tdata, passcode)
+    dest = unique_path(target_dir / it.name)
+    dest.write_bytes(reader.decrypt(it.entry.cache_path))
+    try:
+        os.utime(dest, (it.mtime, it.mtime))
+    except OSError:
+        pass
+    return dest
