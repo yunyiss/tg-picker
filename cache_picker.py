@@ -48,6 +48,21 @@ from ui_kit import (
     unique_path,
 )
 from ui_lang import LangMixin
+from ui_style import (
+    ACCENT,
+    ACCENT_DIM,
+    ACCENT_HOVER,
+    BAR,
+    BG,
+    BORDER,
+    BTN,
+    FG,
+    FIELD,
+    MUTED,
+    PANEL,
+    SEP,
+    SUB,
+)
 
 HERE = Path(__file__).resolve().parent
 # 运行时产物统一落在「数据目录」（便携=程序旁 data/，否则用户目录；见 app_paths）
@@ -104,24 +119,12 @@ GEAR_KEYS = ("conservative", "balanced", "turbo")
 #     一律改用**分段按钮**（Seg.TButton / SegOn.TButton）表达选中态
 #   - 滚动条/进度条同样要补 lightcolor/darkcolor/bordercolor
 # ---------------------------------------------------------------------------
-BG = "#1b1b1f"            # 内容区（最深）
-PANEL = "#232329"         # 顶栏 / 底栏
-BAR = "#1a1a20"           # 筛选栏（比面板明显更暗，形成可感知的一档）
+# 共用色板见 ui_style（两个 GUI 同一套）；这里只保留缓存挑选器专有的卡片色
 CARD = "#26262c"          # 卡片
 CARD_HOVER = "#30303a"    # 悬停
 CARD_SEL = "#24344d"      # 选中：淡蓝底
-ACCENT = "#3b82f6"        # 强调色
-ACCENT_HOVER = "#4b8ef7"
-ACCENT_DIM = "#2b4a77"    # 强调色的弱化版（次级选中态）
-FIELD = "#31313a"         # 输入框底色（比面板亮，保证"看得出是输入框"）
-BORDER = "#4a4c53"        # 输入框描边（对 FIELD 约 2.1:1，可见但不刺眼）
-BTN = "#2e2e36"           # 次级按钮底色
-FG = "#e8e8ec"            # 一级文字
-SUB = "#9aa0a8"           # 二级文字
-MUTED = "#7d838b"         # 三级文字（对 PANEL 约 3.6:1，可读）
-SEP = "#3a3a44"           # 分隔线（对 PANEL 约 1.6:1，肉眼可辨）
 
-# 字体见 ui_kit（与在线挑选器共用同一常量；配色两端故意不同，故不共享）
+# 字体见 ui_kit（两个挑选器共用）
 
 # 网格几何：CARD_* 是卡片实际绘制尺寸，CELL_* 是含间隙的步距。
 # 两者分开，卡片之间才会露出 BG 形成缝隙。

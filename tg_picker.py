@@ -45,6 +45,20 @@ import ui_style
 from i18n import t
 from ui_kit import FONT, human_size, unique_path
 from ui_lang import LangMixin
+from ui_style import (
+    ACCENT,
+    ACCENT_DIM,
+    ACCENT_HOVER,
+    BAR,
+    BG,
+    BORDER,
+    BTN,
+    FG,
+    FIELD,
+    MUTED,
+    PANEL,
+    SUB,
+)
 
 APP_DIR = Path(__file__).resolve().parent
 # 凭据/会话/默认导出目录统一落在「数据目录」（便携=程序旁 data/，否则用户目录）
@@ -58,13 +72,10 @@ def _app_title() -> str:
     """窗口标题（同时用作所有对话框的标题）。"""
     return t("app.online_title")
 
-# 界面配色（深色，接近 Telegram）
-BG = "#1e1e1e"
+# 界面配色：深色主题色板与缓存挑选器**共用**（见 ui_style 的导入）；卡片色为网格专有
 CARD = "#2b2b2b"
 CARD_SEL = "#1f6feb"
 CARD_HOVER = "#3a3a3a"
-FG = "#e8e8e8"
-SUB = "#9aa0a6"
 
 THUMB = 150          # 缩略图边长
 CELL_W = 168         # 单元格宽
@@ -622,6 +633,8 @@ class App(LangMixin):
     语言切换的通用机制继承自 :class:`ui_lang.LangMixin`，本类只补差异部分。
     """
 
+    _lang_box_style = "Panel.TFrame"     # 语言按钮所在容器的 ttk 样式（面板底）
+
     def __init__(self, root: tk.Tk) -> None:
         self.root = root
         self.ui_q: queue.Queue = queue.Queue()
@@ -665,22 +678,93 @@ class App(LangMixin):
 
     # ---------- 样式与布局 ----------
     def _build_style(self) -> None:
+        """ttk 样式：与缓存挑选器**同一套**深色主题（面板 / 文字三级色阶 / 扁平控件）。
+
+        clam 的输入框描边、滚动条、进度条、复选框指示块都由**自绘图片**构成，
+        只设 ``background`` 会留下浅色边缘；因此输入框 / 复选 / 滚动条都要连
+        ``bordercolor`` / ``lightcolor`` / ``darkcolor`` 一起覆盖（复选还要
+        ``upperbordercolor`` / ``lowerbordercolor``）。
+        """
         st = ttk.Style()
         ui_style.use_clam(st)
+        # 容器：内容区 BG / 面板 PANEL / 状态栏 BAR
         st.configure("TFrame", background=BG)
-        st.configure("TLabel", background=BG, foreground=FG)
-        st.configure("Sub.TLabel", background=BG, foreground=SUB, font=(FONT, 8))
-        st.configure("H.TLabel", background=BG, foreground="#8ab4f8", font=(FONT, 10, "bold"))
-        st.configure("TButton", font=(FONT, 9))
-        st.configure("Accent.TButton", font=(FONT, 10, "bold"))
-        st.configure("TEntry", fieldbackground="#2b2b2b", foreground=FG, insertcolor=FG)
-        st.configure("TCheckbutton", background=BG, foreground=FG)
-        st.configure("TCombobox", fieldbackground="#2b2b2b", foreground=FG)
-        st.configure("Horizontal.TProgressbar", background="#1f6feb", troughcolor="#2b2b2b")
+        st.configure("Panel.TFrame", background=PANEL)
+        st.configure("Bar.TFrame", background=BAR)
+        # 文字三级色阶（标签底随所在面板）
+        st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
+        st.configure("Section.TLabel", background=PANEL, foreground=FG,
+                     font=(FONT, 11, "bold"))
+        st.configure("Sub.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
+        st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
+        st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
+        st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
+        # 按钮：统一高度、压掉 clam 的立体边框
+        st.configure("TButton", font=(FONT, 9), padding=(12, 6),
+                     background=BTN, foreground=FG, borderwidth=0, focusthickness=0,
+                     relief="flat", bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
+        st.map("TButton",
+               background=[("pressed", "#3a3a44"), ("active", "#383842"),
+                           ("disabled", PANEL)],
+               foreground=[("disabled", MUTED)],
+               bordercolor=[("active", BTN)], lightcolor=[("active", BTN)],
+               darkcolor=[("active", BTN)])
+        st.configure("Accent.TButton", font=(FONT, 10, "bold"), padding=(18, 6),
+                     background=ACCENT, foreground="#ffffff", borderwidth=0,
+                     relief="flat", bordercolor=ACCENT, lightcolor=ACCENT,
+                     darkcolor=ACCENT)
+        st.map("Accent.TButton",
+               background=[("pressed", "#2f6fd8"), ("active", ACCENT_HOVER),
+                           ("disabled", ACCENT_DIM)],
+               foreground=[("disabled", "#93a7c4")],
+               bordercolor=[("active", ACCENT_HOVER)],
+               lightcolor=[("active", ACCENT_HOVER)],
+               darkcolor=[("active", ACCENT_HOVER)])
+        # 输入框 / 下拉框：显式压掉 clam 的浅色描边
+        st.configure("TEntry", fieldbackground=FIELD, foreground=FG, insertcolor=FG,
+                     borderwidth=1, padding=5, relief="flat",
+                     bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
+        st.map("TEntry",
+               fieldbackground=[("disabled", PANEL), ("focus", FIELD)],
+               foreground=[("disabled", MUTED)],
+               bordercolor=[("focus", ACCENT)],
+               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
+        st.configure("TCombobox", fieldbackground=FIELD, background=FIELD,
+                     foreground=FG, arrowcolor=SUB, borderwidth=1, padding=4,
+                     relief="flat", bordercolor=BORDER, lightcolor=BORDER,
+                     darkcolor=BORDER)
+        st.map("TCombobox",
+               fieldbackground=[("readonly", FIELD)], foreground=[("readonly", FG)],
+               bordercolor=[("focus", ACCENT)],
+               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
+        # 下拉列表本身（Tk 的 Listbox）也要跟着深色
+        self.root.option_add("*TCombobox*Listbox.background", FIELD)
+        self.root.option_add("*TCombobox*Listbox.foreground", FG)
+        self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
+        # 复选框（clam 的 indicator 用 upper/lowerbordercolor 才生效）
+        st.configure("TCheckbutton", background=PANEL, foreground=FG, font=(FONT, 9),
+                     focusthickness=0, focuscolor=PANEL, indicatorbackground=FIELD,
+                     indicatorforeground=ACCENT, upperbordercolor=BORDER,
+                     lowerbordercolor=BORDER, indicatorsize=13)
+        st.map("TCheckbutton",
+               background=[("active", PANEL)], foreground=[("active", FG)],
+               indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
+               indicatorforeground=[("selected", "#ffffff")],
+               upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
+               lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
+        # 进度条 / 滚动条：细轨 + 深槽
+        st.configure("Horizontal.TProgressbar", background=ACCENT,
+                     troughcolor="#14141a", borderwidth=0, thickness=6)
+        st.configure("Vertical.TScrollbar", background=BTN, troughcolor=BG,
+                     bordercolor=BG, arrowcolor=SUB, borderwidth=0,
+                     lightcolor=BTN, darkcolor=BTN)
+        st.map("Vertical.TScrollbar",
+               background=[("active", "#383842"), ("pressed", "#3a3a44")])
         # 分段按钮：语言切换用（与缓存挑选器一致的表达方式）
         ui_style.segmented_buttons(
-            st, base_bg="#2b2b2b", base_fg=SUB, hover_bg="#3a3a3a", hover_fg=FG,
-            accent="#1f6feb", accent_hover="#2b7bf5", padding=(10, 3))
+            st, base_bg=BTN, base_fg=SUB, hover_bg="#383842", hover_fg=FG,
+            accent=ACCENT, accent_hover=ACCENT_HOVER, padding=(14, 5))
 
     # ---------- i18n（差异部分；通用机制见 ui_lang.LangMixin）----------
     def _window_title(self) -> str:
@@ -705,7 +789,7 @@ class App(LangMixin):
 
     def _build_langbar(self) -> None:
         """顶部语言切换条（置顶右侧）。"""
-        bar = ttk.Frame(self.root, padding=(12, 6, 12, 0))
+        bar = ttk.Frame(self.root, padding=(12, 8, 12, 0), style="Panel.TFrame")
         bar.pack(fill="x")
         self._build_lang_switch(bar, with_label=True)
 
@@ -723,55 +807,70 @@ class App(LangMixin):
         self.l_prompt.configure(text=t(key, **kw))
 
     def _build_login(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 10, 12, 4))
+        """登录 / 代理表单：两行紧凑栅格，且两行各自独立（列宽互不牵连）。
+
+        第 1 行 = 凭据（api_id / api_hash / 手机号）+ 登录按钮 + 登录状态；
+        第 2 行 = 代理（短输入框 + 小字提示）。
+        两行各用一个子栅格，是因为第 2 行的提示文案很长——若与第 1 行共列，
+        会把 `api_hash` 所在列一起撑宽，凭空留出一块空白。每行末尾留弹性空列
+        吸收多余宽度，窄窗口下也不挤压控件。
+        """
+        f = ttk.Frame(self.root, padding=(12, 10, 12, 8), style="Panel.TFrame")
         f.pack(fill="x")
         self._login_frame = f            # 验证码行要插在它下面
-        self._T(ttk.Label(f, style="H.TLabel"), "online.login.title").grid(
-            row=0, column=0, columnspan=8, sticky="w", pady=(0, 6)
-        )
-        self._T(ttk.Label(f), "online.login.api_id").grid(row=1, column=0, sticky="w")
-        self.e_api_id = ttk.Entry(f, width=12)
-        self.e_api_id.grid(row=1, column=1, sticky="w", padx=(4, 12))
-        self._T(ttk.Label(f), "online.login.api_hash").grid(row=1, column=2, sticky="w")
-        self.e_api_hash = ttk.Entry(f, width=34)
-        self.e_api_hash.grid(row=1, column=3, sticky="w", padx=(4, 12))
-        self._T(ttk.Label(f), "online.login.phone").grid(row=1, column=4, sticky="w")
-        self.e_phone = ttk.Entry(f, width=18)
-        self.e_phone.grid(row=1, column=5, sticky="w", padx=(4, 12))
-        self.b_login = self._T(ttk.Button(f, command=self.on_login), "online.login.btn")
-        self.b_login.grid(row=1, column=6, sticky="w")
-        # 代理（可留空直连）：仅走 API 时需要，配置里会记住
-        self._T(ttk.Label(f), "online.login.proxy").grid(
-            row=2, column=0, sticky="w", pady=(6, 0))
-        self.e_proxy = ttk.Entry(f, width=40)
-        self.e_proxy.grid(row=2, column=1, columnspan=4, sticky="we",
-                          padx=(4, 12), pady=(6, 0))
-        self._T(ttk.Label(f, style="Sub.TLabel"), "online.login.proxy_hint").grid(
-            row=2, column=5, columnspan=3, sticky="w", pady=(6, 0))
-        self.l_login = ttk.Label(f, text=self._login_text(), style="Sub.TLabel")
-        self.l_login.grid(row=1, column=7, sticky="w", padx=(10, 0))
+        self._T(ttk.Label(f, style="Section.TLabel"), "online.login.title").pack(
+            anchor="w", pady=(0, 8))
+
+        # 第 1 行：凭据 + 登录按钮 + 登录状态。**独立子栅格**：不与代理行共列，
+        # 避免被下面那行的长提示撑开而留下大空白。
+        r1 = ttk.Frame(f, style="Panel.TFrame")
+        r1.pack(fill="x")
+        self._T(ttk.Label(r1), "online.login.api_id").grid(row=0, column=0, sticky="w")
+        self.e_api_id = ttk.Entry(r1, width=12)
+        self.e_api_id.grid(row=0, column=1, sticky="w", padx=(6, 14))
+        self._T(ttk.Label(r1), "online.login.api_hash").grid(row=0, column=2, sticky="w")
+        self.e_api_hash = ttk.Entry(r1, width=30)
+        self.e_api_hash.grid(row=0, column=3, sticky="w", padx=(6, 14))
+        self._T(ttk.Label(r1), "online.login.phone").grid(row=0, column=4, sticky="w")
+        self.e_phone = ttk.Entry(r1, width=15)
+        self.e_phone.grid(row=0, column=5, sticky="w", padx=(6, 14))
+        self.b_login = self._T(ttk.Button(r1, command=self.on_login), "online.login.btn")
+        self.b_login.grid(row=0, column=6, sticky="w", padx=(0, 10))
+        self.l_login = ttk.Label(r1, text=self._login_text(), style="Status.TLabel")
+        self.l_login.grid(row=0, column=7, sticky="w")
+        r1.columnconfigure(8, weight=1)   # 弹性空列：吸收多余宽度，内容左对齐
+
+        # 第 2 行：代理（紧凑）+ 小字提示（同样独立，互不影响列宽）
+        r2 = ttk.Frame(f, style="Panel.TFrame")
+        r2.pack(fill="x", pady=(8, 0))
+        self._T(ttk.Label(r2), "online.login.proxy").grid(row=0, column=0, sticky="w")
+        self.e_proxy = ttk.Entry(r2, width=24)
+        self.e_proxy.grid(row=0, column=1, sticky="w", padx=(6, 8))
+        self._T(ttk.Label(r2, style="Hint.TLabel"), "online.login.proxy_hint").grid(
+            row=0, column=2, sticky="w")
+        r2.columnconfigure(3, weight=1)
 
         # 验证码/密码输入行（默认隐藏，收到后台请求时显示）
-        self.pf = ttk.Frame(self.root, padding=(12, 0, 12, 4))
+        self.pf = ttk.Frame(self.root, padding=(12, 0, 12, 6), style="Panel.TFrame")
         self._T(ttk.Label(self.pf), "online.login.code_label").grid(row=0, column=0, sticky="w")
         self.e_prompt = ttk.Entry(self.pf, width=28, show="")
         self.e_prompt.grid(row=0, column=1, sticky="w", padx=(4, 8))
         self._T(ttk.Button(self.pf, command=self.on_prompt_submit),
                 "common.submit").grid(row=0, column=2)
-        self.l_prompt = ttk.Label(self.pf, text="", style="Sub.TLabel")
+        self.l_prompt = ttk.Label(self.pf, text="", style="Status.TLabel")
         self.l_prompt.grid(row=0, column=3, sticky="w", padx=(10, 0))
         self.e_prompt.bind("<Return>", lambda e: self.on_prompt_submit())
         self.prompt_kind = None
 
     def _build_chat(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 6, 12, 4))
+        f = ttk.Frame(self.root, padding=(12, 8, 12, 8), style="Panel.TFrame")
         f.pack(fill="x")
-        self._T(ttk.Label(f, style="H.TLabel"), "online.chat.title").grid(
-            row=0, column=0, columnspan=10, sticky="w", pady=(0, 6))
+        self._T(ttk.Label(f, style="Section.TLabel"), "online.chat.title").grid(
+            row=0, column=0, columnspan=10, sticky="w", pady=(0, 8))
         self._T(ttk.Label(f), "online.chat.chat_label").grid(row=1, column=0, sticky="w")
         self.e_chat = ttk.Entry(f, width=42)
         self.e_chat.grid(row=1, column=1, columnspan=2, sticky="we", padx=(4, 12))
-        self._T(ttk.Label(f, style="Sub.TLabel"), "online.chat.chat_hint").grid(
+        self._T(ttk.Label(f, style="Hint.TLabel"), "online.chat.chat_hint").grid(
             row=1, column=3, sticky="w", padx=(0, 16))
         self._T(ttk.Label(f), "online.chat.count_label").grid(row=1, column=4, sticky="w")
         self.cb_count = ttk.Combobox(f, width=6, state="readonly",
@@ -812,7 +911,7 @@ class App(LangMixin):
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
     def _build_actions(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 4, 12, 4))
+        f = ttk.Frame(self.root, padding=(12, 8, 12, 8), style="Panel.TFrame")
         f.pack(fill="x")
         self._T(ttk.Label(f), "online.actions.out_label").grid(row=0, column=0, sticky="w")
         self.e_out = ttk.Entry(f, width=58)
@@ -835,17 +934,17 @@ class App(LangMixin):
         self.b_cancel.grid(row=0, column=7)
         f.columnconfigure(1, weight=1)
 
-        f2 = ttk.Frame(self.root, padding=(12, 0, 12, 6))
+        f2 = ttk.Frame(self.root, padding=(12, 4, 12, 8), style="Bar.TFrame")
         f2.pack(fill="x")
         self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100)
         self.pb.pack(side="left", fill="x", expand=True)
-        self.l_status = ttk.Label(f2, text=t("common.ready"), style="Sub.TLabel")
+        self.l_status = ttk.Label(f2, text=t("common.ready"), style="BarStatus.TLabel")
         self.l_status.pack(side="left", padx=(10, 0))
 
     def _build_log(self) -> None:
         f = ttk.Frame(self.root, padding=(12, 0, 12, 10))
         f.pack(fill="both")
-        self.txt = tk.Text(f, height=7, bg="#141414", fg="#c8c8c8", insertbackground=FG,
+        self.txt = tk.Text(f, height=7, bg="#14141a", fg=SUB, insertbackground=FG,
                            relief="flat", font=("Consolas", 9), wrap="none")
         sb = ttk.Scrollbar(f, orient="vertical", command=self.txt.yview)
         self.txt.configure(yscrollcommand=sb.set, state="disabled")

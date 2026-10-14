@@ -213,3 +213,79 @@ def test_online_login_rejects_bad_proxy(tk_root, monkeypatch):
     assert warns, "非法代理应弹提示"
     assert submitted == [], "非法代理不应提交登录"
     app._on_close()
+
+
+@pytest.mark.gui
+def test_online_proxy_row_is_compact(tk_root):
+    """代理行只留紧凑的代理框 + 小字提示（登录按钮已归到凭据行）。"""
+    app = tp.App(tk_root)
+    assert app.e_proxy.winfo_exists()
+    assert int(app.e_proxy.cget("width")) <= 30, "代理输入框不应过宽"
+    assert app.e_proxy.master is not app.b_login.master, "登录按钮应归到凭据行"
+    texts = []
+
+    def _walk(w):
+        for c in w.winfo_children():
+            if str(c.winfo_class()) == "TLabel":
+                texts.append(str(c.cget("text")))
+            _walk(c)
+
+    _walk(app._login_frame)
+    assert i18n.t("online.login.proxy_hint") in texts, "代理行应有小字提示"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_online_login_button_on_credentials_row(tk_root):
+    """登录按钮与登录状态应与手机号（凭据行）同一行。"""
+    app = tp.App(tk_root)
+    row1 = app.e_api_id.master
+    assert app.e_phone.master is row1
+    assert app.b_login.master is row1, "登录按钮应与手机号同一行"
+    assert app.l_login.master is row1, "登录状态应与按钮同一行"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_online_credentials_row_has_no_big_gap(tk_root):
+    """回归：两行各自独立子栅格——代理行很长的提示文案不应把凭据行撑出空白。
+
+    旧实现里两行共用一个栅格，代理提示横跨 api_hash 所在的列，把该列撑得很宽，
+    `api_id` 与 `api_hash` 之间因此空出一大块。
+    """
+    app = tp.App(tk_root)
+    tk_root.update()                     # 需要真实几何
+    row1 = app.e_api_id.master
+    labels = {str(w.cget("text")): w for w in row1.winfo_children()
+              if str(w.winfo_class()) == "TLabel"}
+    lab_hash = labels[i18n.t("online.login.api_hash")]
+    gap = lab_hash.winfo_x() - (app.e_api_id.winfo_x() + app.e_api_id.winfo_width())
+    assert 0 <= gap < 40, f"api_id 与 api_hash 之间不应有大片空白（实际 {gap}px）"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_online_login_passes_parsed_proxy(tk_root, monkeypatch):
+    """填了代理时，登录任务应带上解析后的 proxy 参数（保持原功能逻辑）。"""
+    app = tp.App(tk_root)
+    app.e_api_id.insert(0, "123")
+    app.e_api_hash.insert(0, "y" * 32)
+    app.e_phone.insert(0, "+8613800000000")
+    app.e_proxy.insert(0, "127.0.0.1:7897")
+    captured = {}
+
+    def fake_login(api_id, api_hash, phone, proxy=None):
+        captured.update(api_id=api_id, api_hash=api_hash, phone=phone, proxy=proxy)
+
+        async def _noop() -> None:
+            return None
+
+        return _noop()
+
+    app.worker.login = fake_login
+    app.worker.submit = lambda coro, label=None: coro.close()
+    app.on_login()
+    assert captured["proxy"] == ("socks5", "127.0.0.1", 7897)
+    assert captured["api_id"] == 123
+    assert captured["phone"] == "+8613800000000"
+    app._on_close()
