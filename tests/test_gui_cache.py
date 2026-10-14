@@ -16,6 +16,7 @@ import pytest
 from PIL import Image
 
 import cache_picker as cp
+import cache_source as cs
 import i18n
 import ui_kit
 
@@ -367,4 +368,42 @@ def test_gear_change_does_not_strand_pending_thumbnails(tk_root):
         f"改档位后缩略图卡死：thumbs={sorted(app.thumb_mem)} "
         f"pending={sorted(app.thumb_pending)} failed={sorted(app.thumb_failed)}"
     )
+    app._on_close()
+
+
+def _minimal_item(rel: str) -> cp.MediaItem:
+    """构造一条最小的缓存媒体（只为校验"下标→身份"用，不碰磁盘）。"""
+    return cp.MediaItem(entry=cs.CacheEntry(
+        cache_path=Path("dummy"), rel=rel, label="cache", mtime=1_700_000_000.0,
+        enc_size=100, kind="image", ext=".jpg", size=100, thumb_key=rel))
+
+
+@pytest.mark.gui
+def test_stale_thumb_result_must_not_land_on_another_item(tk_root):
+    """回归（"串图"）：列表被筛选/排序换掉后，在途的旧缩略图结果不得贴到新条目上。
+
+    缩略图结果按**列表下标**回传，而下标只表示"条目在**当时**列表里的位置"：
+    筛选、排序、重扫都会换掉 ``self.items``。旧实现只清 ``thumb_mem``/``thumb_pending``，
+    既不清 ``photo_queue``、也不做身份校验，于是排序后旧结果会落到"现在位于同一下标
+    的另一条媒体"上，并被 ``thumb_mem``（同样以下标为键）长期记住 —— 显示的是错的图。
+    这里模拟"a 在 idx0 发出的结果迟到、而 idx0 已换成 b"，断言它被丢弃。
+    """
+    app = cp.CacheApp(tk_root)
+    a, b = _minimal_item("a"), _minimal_item("b")
+    app.items = [a, b]
+    red = Image.new("RGB", (8, 8), (200, 30, 30))
+    blue = Image.new("RGB", (8, 8), (30, 30, 200))
+
+    app.photo_queue.put((0, "a", red, "image"))   # a 身在 idx0 时发出的在途结果
+    app.items = [b, a]                            # 模拟改排序：idx0 现在是 b
+    app._drain_photos()
+    assert 0 not in app.thumb_mem, "旧结果不得贴到新条目（串图）"
+
+    app.photo_queue.put((0, "b", blue, "image"))  # 当前条目自己的结果
+    app._drain_photos()
+    assert 0 in app.thumb_mem, "当前条目自己的结果应当正常落地"
+
+    app.photo_queue.put((5, "whatever", red, "image"))
+    app.on_filter_change()                        # 换列表（改筛选/排序）
+    assert app.photo_queue.empty(), "换列表时应清掉在途结果"
     app._on_close()

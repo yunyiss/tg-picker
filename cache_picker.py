@@ -1077,6 +1077,7 @@ class CacheApp(LangMixin):
         self.thumb_mem.clear()
         self.thumb_pending.clear()
         self.thumb_failed.clear()
+        self._clear_photo_queue()        # 在途结果属于旧列表，直接丢弃
         self.cells_by_slot.clear()
         self.thumbs_ready = 0
         self.hover_slot = None
@@ -1095,6 +1096,7 @@ class CacheApp(LangMixin):
         self.thumb_mem.clear()
         self.thumb_pending.clear()
         self.thumb_failed.clear()
+        self._clear_photo_queue()        # 列表已换，在途结果按下标回传不再有效
         self.hover_slot = None
         self._last_scrollregion = None
         self.canvas.yview_moveto(0)
@@ -1479,6 +1481,9 @@ class CacheApp(LangMixin):
         reader = self.reader
         kind = it.kind
         cache_path = it.entry.cache_path
+        # 身份键：结果回传时用它校验。下标只代表"条目在**当时**列表里的位置"，
+        # 列表一旦被筛选/排序/重扫换掉，同一个下标可能已经是另一条媒体。
+        rel = str(it.entry.rel)
 
         def work():
             try:
@@ -1501,24 +1506,43 @@ class CacheApp(LangMixin):
                             img.save(tp, "JPEG", quality=85)
                         except OSError:
                             pass
-                self.photo_queue.put((idx, img, kind))
+                self.photo_queue.put((idx, rel, img, kind))
             except Exception:
-                self.photo_queue.put((idx, None, kind))
+                self.photo_queue.put((idx, rel, None, kind))
 
         self.pool.submit(work)
 
+    def _clear_photo_queue(self) -> None:
+        """丢弃在途的缩略图结果。
+
+        列表被筛选/排序/重扫换掉之后，旧请求的结果已无意义（而且按下标回传，
+        贴上去就是"串图"）。早丢弃可以少做几次 PIL→PhotoImage 的转换，
+        也避免在途的图对象占着内存。
+        """
+        while True:
+            try:
+                self.photo_queue.get_nowait()
+            except queue.Empty:
+                return
+
     def _drain_photos(self) -> bool:
-        """主线程把后台读到的 PIL 图转成 PhotoImage（每周期限量）。"""
+        """主线程把后台读到的 PIL 图转成 PhotoImage（每周期限量）。
+
+        结果按下标回传，因此**必须用身份键复核**：下标相同不等于同一条媒体
+        （筛选、排序、重扫都会换掉 `self.items`）。不一致就整条丢弃——既不写
+        `thumb_mem`（否则错的图会被长期记住），也不动 `thumb_pending`（那是
+        新请求的pending）。
+        """
         changed = False
         for _ in range(PHOTO_BATCH_PER_TICK):
             try:
                 queued = self.photo_queue.get_nowait()
             except queue.Empty:
                 break
-            idx, img, kind = queued
-            self.thumb_pending.discard(idx)
-            if idx >= len(self.items):
+            idx, rel, img, kind = queued
+            if idx >= len(self.items) or str(self.items[idx].entry.rel) != rel:
                 continue
+            self.thumb_pending.discard(idx)
             if img is None:
                 # 提取失败：视频仍显示占位图，图片留空
                 self.thumb_failed.add(idx)
