@@ -52,6 +52,7 @@
   "cell.no_preview": "无预览",
   "cell.loading": "…",
 
+  "cache.setup.title": "① 缓存与设置",
   "cache.setup.tdata_label": "tdata 目录",
   "cache.setup.passcode_label": "锁定密码",
   "cache.setup.hint": "没设过就留空　·　原 tdata 只读，不会被改动",
@@ -60,6 +61,7 @@
   "cache.setup.clean_btn": "清理缓存",
   "cache.setup.formats_label": "输出类型",
 
+  "cache.toolbar.title": "② 筛选与选择",
   "cache.toolbar.export_label": "保存内容",
   "cache.toolbar.sort_label": "排序",
   "cache.toolbar.gear_label": "性能档位",

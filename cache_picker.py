@@ -407,6 +407,8 @@ class CacheApp(LangMixin):
         st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
         st.configure("Title.TLabel", background=PANEL, foreground=FG,
                      font=(FONT, 12, "bold"))
+        st.configure("Section.TLabel", background=PANEL, foreground=FG,
+                     font=(FONT, 11, "bold"))
         st.configure("Field.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
         st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
         st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
@@ -414,6 +416,9 @@ class CacheApp(LangMixin):
                      font=(FONT, 10, "bold"))
         # 筛选栏上的文字（背景是 BAR 而非 PANEL）
         st.configure("BarField.TLabel", background=BAR, foreground=SUB, font=(FONT, 9))
+        st.configure("BarSection.TLabel", background=BAR, foreground=FG,
+                     font=(FONT, 11, "bold"))
+        st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
 
     @staticmethod
     def _style_buttons(st: ttk.Style) -> None:
@@ -564,8 +569,8 @@ class CacheApp(LangMixin):
         # padding 左缘与设置区/底栏标签对齐（同为 16）
         bar = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 12, 16, 12))
         bar.pack(fill="x", side="top")
-        # 语言切换放最右，其左是视图概览
-        self._build_lang_switch(bar)
+        # 语言切换放最右（带「语言」标签，与 API 模式一致），其左是视图概览
+        self._build_lang_switch(bar, with_label=True)
         self.l_header_stat = ttk.Label(bar, text="", style="Status.TLabel")
         self.l_header_stat.pack(side="right")
         self._T(ttk.Label(bar, style="Title.TLabel"), "app.cache_title").pack(side="left")
@@ -575,6 +580,9 @@ class CacheApp(LangMixin):
     def _build_setup(self) -> None:
         wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 14, 16, 14))
         wrap.pack(fill="x", side="top")
+        # 分区标题：与 API 模式的「① 登录」「② 选择聊天与筛选」同款、同编号风格
+        self._T(ttk.Label(wrap, style="Section.TLabel"), "cache.setup.title").pack(
+            anchor="w", pady=(0, 8))
 
         # 第一行：数据源 + 主操作（统一 8px 间距节奏）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
@@ -640,6 +648,9 @@ class CacheApp(LangMixin):
     def _build_toolbar(self) -> None:
         wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 10, 16, 10))
         wrap.pack(fill="x", side="top")
+        # 分区标题（编号风格与另一模式一致；本区底为 BAR，故用 BarSection 变体）
+        self._T(ttk.Label(wrap, style="BarSection.TLabel"),
+                "cache.toolbar.title").pack(anchor="w", pady=(0, 8))
 
         row = ttk.Frame(wrap, style="Bar.TFrame")
         row.pack(fill="x")
@@ -781,49 +792,48 @@ class CacheApp(LangMixin):
 
     # ---------- 底部操作条 ----------
     def _build_bottombar(self) -> None:
-        ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="bottom")
         wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 12, 16, 12))
         wrap.pack(fill="x", side="bottom")
 
-        # 第一行：选择操作 + 保存设置
+        # 第一行：保存目标（与 API 模式操作条第 1 行同一版式）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
         r1.pack(fill="x")
-        # l_count / b_save 的文本由 update_count() 拥有，故用 t() 设初值但不登记
-        self.l_count = ttk.Label(r1, text=t("cache.bottom.count_none"),
-                                 style="Count.TLabel", width=26)
-        self.l_count.pack(side="left", padx=(0, 12))
-        self._T(ttk.Button(r1, command=self.on_select_all), "common.select_all").pack(
-            side="left", padx=(0, 8))
-        self._T(ttk.Button(r1, command=self.on_invert), "common.invert").pack(
-            side="left", padx=(0, 8))
-        self._T(ttk.Button(r1, command=self.on_clear_sel), "common.clear_sel").pack(side="left")
-
-        self.v_bydate = tk.BooleanVar(value=False)
-        self._T(ttk.Checkbutton(r1, variable=self.v_bydate),
-                "cache.bottom.bydate").pack(side="right")
-
-        # 第二行：保存目标 + 主按钮（左边缘与上一区对齐）
-        r2 = ttk.Frame(wrap, style="Panel.TFrame")
-        r2.pack(fill="x", pady=(10, 0))
-        self._T(ttk.Label(r2, style="Field.TLabel", width=14),
+        self._T(ttk.Label(r1, style="Field.TLabel", width=14),
                 "cache.bottom.out_label").pack(side="left")
-        self.e_out = ttk.Entry(r2)
+        self.e_out = ttk.Entry(r1)
         self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
-        self._T(ttk.Button(r2, command=self.on_pick_out), "common.browse").pack(
+        self._T(ttk.Button(r1, command=self.on_pick_out), "common.browse").pack(
             side="left", padx=(0, 8))
         # 打开目录：用系统文件管理器打开「保存到」目录（失败时回退复制路径）
-        self.b_open = self._T(ttk.Button(r2, command=self.on_open_dir),
+        self.b_open = self._T(ttk.Button(r1, command=self.on_open_dir),
                               "common.open_dir")
-        self.b_open.pack(side="left", padx=(0, 8))
-        self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
-                                 command=self.on_save)
-        self.b_save.pack(side="left", padx=(12, 0))
+        self.b_open.pack(side="left")
+
+        # 第二行：计数 + 选择操作（左）｜按日期分文件夹 + 主按钮 + 取消（右）
+        r2 = ttk.Frame(wrap, style="Panel.TFrame")
+        r2.pack(fill="x", pady=(10, 0))
+        # l_count / b_save 的文本由 update_count() 拥有，故用 t() 设初值但不登记
+        self.l_count = ttk.Label(r2, text=t("cache.bottom.count_none"),
+                                 style="Count.TLabel", width=26)
+        self.l_count.pack(side="left", padx=(0, 12))
+        self._T(ttk.Button(r2, command=self.on_select_all), "common.select_all").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r2, command=self.on_invert), "common.invert").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r2, command=self.on_clear_sel), "common.clear_sel").pack(side="left")
+        # 右侧：取消 / 主按钮 / 本模式特有的「按日期分文件夹」（自右向左 pack）
         self.b_cancel = self._T(ttk.Button(r2, command=self.on_cancel, state="disabled"),
                                 "common.cancel")
-        self.b_cancel.pack(side="left", padx=(8, 0))
+        self.b_cancel.pack(side="right")
+        self.b_save = ttk.Button(r2, text=t("cache.bottom.save_none"), style="Accent.TButton",
+                                 command=self.on_save)
+        self.b_save.pack(side="right", padx=(0, 8))
+        self.v_bydate = tk.BooleanVar(value=False)
+        self._T(ttk.Checkbutton(r2, variable=self.v_bydate),
+                "cache.bottom.bydate").pack(side="right", padx=(0, 16))
 
     def _build_grid(self) -> None:
-        wrap = ttk.Frame(self.root, padding=(14, 10, 8, 10))
+        wrap = ttk.Frame(self.root, padding=(16, 10, 8, 10))
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
         vbar = ttk.Scrollbar(wrap, orient="vertical", command=self._on_scrollbar)
@@ -841,19 +851,20 @@ class CacheApp(LangMixin):
         self.canvas.bind("<Button-5>", lambda e: self._scroll_units(3))
 
     def _build_statusbar(self) -> None:
-        wrap = ttk.Frame(self.root, style="Panel.TFrame", padding=(16, 7, 16, 7))
+        # 状态栏底色与 API 模式一致（BAR）；状态在右、进度在左
+        wrap = ttk.Frame(self.root, style="Bar.TFrame", padding=(16, 7, 16, 7))
         wrap.pack(fill="x", side="bottom")
-        self.l_status = ttk.Label(wrap, text=t("common.ready"), style="Status.TLabel")
-        self.l_status.pack(side="left")
+        self.l_status = ttk.Label(wrap, text=t("common.ready"), style="BarStatus.TLabel")
+        self.l_status.pack(side="right")
         # 进度条只在任务进行时出现，常态不占位（避免"像个空输入框"）
         self.pb = ttk.Progressbar(wrap, mode="determinate", maximum=100,
-                                  style="Slim.Horizontal.TProgressbar", length=200)
+                                  style="Slim.Horizontal.TProgressbar")
         self._pb_visible = False
 
     def _show_progress(self, value: float | None = None) -> None:
         """显示进度条（并可选设值）。"""
         if not self._pb_visible:
-            self.pb.pack(side="right")
+            self.pb.pack(side="left", fill="x", expand=True, padx=(0, 10))
             self._pb_visible = True
         if value is not None:
             self.pb.configure(value=value)

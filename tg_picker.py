@@ -57,6 +57,7 @@ from ui_style import (
     FIELD,
     MUTED,
     PANEL,
+    SEP,
     SUB,
 )
 
@@ -689,12 +690,15 @@ class App(LangMixin):
         """
         st = ttk.Style()
         ui_style.use_clam(st)
-        # 容器：内容区 BG / 面板 PANEL / 状态栏 BAR
+        # 容器：内容区 BG / 面板 PANEL / 状态栏 BAR / 分隔线 SEP
         st.configure("TFrame", background=BG)
         st.configure("Panel.TFrame", background=PANEL)
         st.configure("Bar.TFrame", background=BAR)
-        # 文字三级色阶（标签底随所在面板）
+        st.configure("Sep.TFrame", background=SEP)
+        # 文字三级色阶（标签底随所在面板）；标题/分区标题与缓存模式同款
         st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
+        st.configure("Title.TLabel", background=PANEL, foreground=FG,
+                     font=(FONT, 12, "bold"))
         st.configure("Section.TLabel", background=PANEL, foreground=FG,
                      font=(FONT, 11, "bold"))
         st.configure("Sub.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
@@ -789,11 +793,17 @@ class App(LangMixin):
             if it.thumb_failed and it.img_label is not None:
                 it.img_label.configure(text=t("cell.no_preview"))
 
+    def _divider(self) -> None:
+        """一条 1px 分隔线，用于划分区域（与缓存模式同款）。"""
+        ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
+
     def _build_langbar(self) -> None:
-        """顶部语言切换条（置顶右侧）。"""
-        bar = ttk.Frame(self.root, padding=(12, 8, 12, 0), style="Panel.TFrame")
+        """顶部标题栏：左侧模式标题，右侧语言切换（与缓存模式同一版式）。"""
+        bar = ttk.Frame(self.root, padding=(16, 12, 16, 8), style="Panel.TFrame")
         bar.pack(fill="x")
         self._build_lang_switch(bar, with_label=True)
+        self._T(ttk.Label(bar, style="Title.TLabel"), "app.online_title").pack(side="left")
+        self._divider()
 
     def _login_text(self) -> str:
         """登录状态标签：未登录 / 已登录：<名字>。"""
@@ -817,7 +827,7 @@ class App(LangMixin):
         会把 `api_hash` 所在列一起撑宽，凭空留出一块空白。每行末尾留弹性空列
         吸收多余宽度，窄窗口下也不挤压控件。
         """
-        f = ttk.Frame(self.root, padding=(12, 10, 12, 8), style="Panel.TFrame")
+        f = ttk.Frame(self.root, padding=(16, 10, 16, 8), style="Panel.TFrame")
         f.pack(fill="x")
         self._login_frame = f            # 验证码行要插在它下面
         self._T(ttk.Label(f, style="Section.TLabel"), "online.login.title").pack(
@@ -827,13 +837,16 @@ class App(LangMixin):
         # 避免被下面那行的长提示撑开而留下大空白。
         r1 = ttk.Frame(f, style="Panel.TFrame")
         r1.pack(fill="x")
-        self._T(ttk.Label(r1), "online.login.api_id").grid(row=0, column=0, sticky="w")
+        self._T(ttk.Label(r1, style="Sub.TLabel"),
+                "online.login.api_id").grid(row=0, column=0, sticky="w")
         self.e_api_id = ttk.Entry(r1, width=12)
         self.e_api_id.grid(row=0, column=1, sticky="w", padx=(6, 14))
-        self._T(ttk.Label(r1), "online.login.api_hash").grid(row=0, column=2, sticky="w")
+        self._T(ttk.Label(r1, style="Sub.TLabel"),
+                "online.login.api_hash").grid(row=0, column=2, sticky="w")
         self.e_api_hash = ttk.Entry(r1, width=30)
         self.e_api_hash.grid(row=0, column=3, sticky="w", padx=(6, 14))
-        self._T(ttk.Label(r1), "online.login.phone").grid(row=0, column=4, sticky="w")
+        self._T(ttk.Label(r1, style="Sub.TLabel"),
+                "online.login.phone").grid(row=0, column=4, sticky="w")
         self.e_phone = ttk.Entry(r1, width=15)
         self.e_phone.grid(row=0, column=5, sticky="w", padx=(6, 14))
         self.b_login = self._T(ttk.Button(r1, command=self.on_login), "online.login.btn")
@@ -845,7 +858,8 @@ class App(LangMixin):
         # 第 2 行：代理（紧凑）+ 小字提示（同样独立，互不影响列宽）
         r2 = ttk.Frame(f, style="Panel.TFrame")
         r2.pack(fill="x", pady=(8, 0))
-        self._T(ttk.Label(r2), "online.login.proxy").grid(row=0, column=0, sticky="w")
+        self._T(ttk.Label(r2, style="Sub.TLabel"),
+                "online.login.proxy").grid(row=0, column=0, sticky="w")
         self.e_proxy = ttk.Entry(r2, width=24)
         self.e_proxy.grid(row=0, column=1, sticky="w", padx=(6, 8))
         self._T(ttk.Label(r2, style="Hint.TLabel"), "online.login.proxy_hint").grid(
@@ -853,8 +867,9 @@ class App(LangMixin):
         r2.columnconfigure(3, weight=1)
 
         # 验证码/密码输入行（默认隐藏，收到后台请求时显示）
-        self.pf = ttk.Frame(self.root, padding=(12, 0, 12, 6), style="Panel.TFrame")
-        self._T(ttk.Label(self.pf), "online.login.code_label").grid(row=0, column=0, sticky="w")
+        self.pf = ttk.Frame(self.root, padding=(16, 0, 16, 6), style="Panel.TFrame")
+        self._T(ttk.Label(self.pf, style="Sub.TLabel"),
+                "online.login.code_label").grid(row=0, column=0, sticky="w")
         self.e_prompt = ttk.Entry(self.pf, width=28, show="")
         self.e_prompt.grid(row=0, column=1, sticky="w", padx=(4, 8))
         self._T(ttk.Button(self.pf, command=self.on_prompt_submit),
@@ -863,23 +878,27 @@ class App(LangMixin):
         self.l_prompt.grid(row=0, column=3, sticky="w", padx=(10, 0))
         self.e_prompt.bind("<Return>", lambda e: self.on_prompt_submit())
         self.prompt_kind = None
+        self._divider()
 
     def _build_chat(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 8, 12, 8), style="Panel.TFrame")
+        f = ttk.Frame(self.root, padding=(16, 8, 16, 8), style="Panel.TFrame")
         f.pack(fill="x")
         self._T(ttk.Label(f, style="Section.TLabel"), "online.chat.title").grid(
             row=0, column=0, columnspan=10, sticky="w", pady=(0, 8))
-        self._T(ttk.Label(f), "online.chat.chat_label").grid(row=1, column=0, sticky="w")
+        self._T(ttk.Label(f, style="Sub.TLabel"),
+                "online.chat.chat_label").grid(row=1, column=0, sticky="w")
         self.e_chat = ttk.Entry(f, width=42)
         self.e_chat.grid(row=1, column=1, columnspan=2, sticky="we", padx=(4, 12))
         self._T(ttk.Label(f, style="Hint.TLabel"), "online.chat.chat_hint").grid(
             row=1, column=3, sticky="w", padx=(0, 16))
-        self._T(ttk.Label(f), "online.chat.count_label").grid(row=1, column=4, sticky="w")
+        self._T(ttk.Label(f, style="Sub.TLabel"),
+                "online.chat.count_label").grid(row=1, column=4, sticky="w")
         self.cb_count = ttk.Combobox(f, width=6, state="readonly",
                                      values=("30", "60", "100", "200", "500"))
         self.cb_count.set("60")
         self.cb_count.grid(row=1, column=5, sticky="w", padx=(4, 16))
-        self._T(ttk.Label(f), "online.chat.kind_label").grid(row=1, column=6, sticky="w")
+        self._T(ttk.Label(f, style="Sub.TLabel"),
+                "online.chat.kind_label").grid(row=1, column=6, sticky="w")
         self.v_photo = tk.BooleanVar(value=True)
         self.v_video = tk.BooleanVar(value=False)
         self.v_file = tk.BooleanVar(value=False)
@@ -897,13 +916,13 @@ class App(LangMixin):
         f.columnconfigure(1, weight=1)
 
     def _build_grid(self) -> None:
-        wrap = ttk.Frame(self.root, padding=(12, 6, 12, 4))
+        wrap = ttk.Frame(self.root, padding=(16, 10, 8, 10))
         wrap.pack(fill="both", expand=True)
         self.canvas = tk.Canvas(wrap, bg=BG, highlightthickness=0)
         vbar = ttk.Scrollbar(wrap, orient="vertical", command=self.canvas.yview)
         self.canvas.configure(yscrollcommand=vbar.set)
         self.canvas.pack(side="left", fill="both", expand=True)
-        vbar.pack(side="right", fill="y")
+        vbar.pack(side="right", fill="y", padx=(6, 0))
         self.inner = tk.Frame(self.canvas, bg=BG)
         self.win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
         self.inner.bind("<Configure>",
@@ -913,40 +932,53 @@ class App(LangMixin):
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
 
     def _build_actions(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 8, 12, 8), style="Panel.TFrame")
-        f.pack(fill="x")
-        self._T(ttk.Label(f), "online.actions.out_label").grid(row=0, column=0, sticky="w")
-        self.e_out = ttk.Entry(f, width=58)
-        self.e_out.insert(0, str(DEFAULT_OUT))
-        self.e_out.grid(row=0, column=1, sticky="we", padx=(4, 6))
-        self._T(ttk.Button(f, command=self.on_pick_dir), "common.browse").grid(
-            row=0, column=2, padx=(0, 6))
-        self._T(ttk.Button(f, command=self.on_open_dir), "common.open_dir").grid(
-            row=0, column=3, padx=(0, 12))
-        self._T(ttk.Button(f, command=lambda: self.set_all(True)), "common.select_all").grid(
-            row=0, column=4, padx=(0, 4))
-        self._T(ttk.Button(f, command=self.invert_all), "common.invert").grid(
-            row=0, column=5, padx=(0, 4))
-        self._T(ttk.Button(f, command=lambda: self.set_all(False)), "common.clear_sel").grid(
-            row=0, column=6, padx=(0, 12))
-        # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
-        self.b_dl = ttk.Button(f, text=t("online.download_btn", n=0), style="Accent.TButton",
-                               command=self.on_download)
-        self.b_dl.grid(row=0, column=7, padx=(0, 8))
-        self.b_cancel = self._T(ttk.Button(f, command=self.on_cancel, state="disabled"),
-                                "common.cancel")
-        self.b_cancel.grid(row=0, column=8)
-        f.columnconfigure(1, weight=1)
+        """底部操作区：两行版式，与缓存模式完全一致。
 
-        f2 = ttk.Frame(self.root, padding=(12, 4, 12, 8), style="Bar.TFrame")
+        第 1 行 = 保存到 + 输入框 + 浏览 + 打开目录；
+        第 2 行 = 全选/反选/清除选择（左）+ 主按钮/取消（右）。
+        """
+        f = ttk.Frame(self.root, padding=(16, 8, 16, 8), style="Panel.TFrame")
+        f.pack(fill="x")
+
+        # 第 1 行：保存目标
+        r1 = ttk.Frame(f, style="Panel.TFrame")
+        r1.pack(fill="x")
+        self._T(ttk.Label(r1, style="Sub.TLabel"),
+                "online.actions.out_label").pack(side="left")
+        self.e_out = ttk.Entry(r1, width=58)
+        self.e_out.insert(0, str(DEFAULT_OUT))
+        self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
+        self._T(ttk.Button(r1, command=self.on_pick_dir), "common.browse").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r1, command=self.on_open_dir), "common.open_dir").pack(side="left")
+
+        # 第 2 行：选择操作（左）+ 主按钮 / 取消（右）
+        r2 = ttk.Frame(f, style="Panel.TFrame")
+        r2.pack(fill="x", pady=(10, 0))
+        self._T(ttk.Button(r2, command=lambda: self.set_all(True)), "common.select_all").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r2, command=self.invert_all), "common.invert").pack(
+            side="left", padx=(0, 8))
+        self._T(ttk.Button(r2, command=lambda: self.set_all(False)), "common.clear_sel").pack(
+            side="left")
+        self.b_cancel = self._T(ttk.Button(r2, command=self.on_cancel, state="disabled"),
+                                "common.cancel")
+        self.b_cancel.pack(side="right")
+        # b_dl 的文本由 update_button() 拥有，故用 t() 设初值但不登记
+        self.b_dl = ttk.Button(r2, text=t("online.download_btn", n=0), style="Accent.TButton",
+                               command=self.on_download)
+        self.b_dl.pack(side="right", padx=(0, 8))
+
+        # 进度条在左、状态在右（与缓存模式一致）
+        f2 = ttk.Frame(self.root, padding=(16, 4, 16, 8), style="Bar.TFrame")
         f2.pack(fill="x")
-        self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100)
-        self.pb.pack(side="left", fill="x", expand=True)
         self.l_status = ttk.Label(f2, text=t("common.ready"), style="BarStatus.TLabel")
-        self.l_status.pack(side="left", padx=(10, 0))
+        self.l_status.pack(side="right")
+        self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100)
+        self.pb.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
     def _build_log(self) -> None:
-        f = ttk.Frame(self.root, padding=(12, 0, 12, 10))
+        f = ttk.Frame(self.root, padding=(16, 0, 16, 10))
         f.pack(fill="both")
         self.txt = tk.Text(f, height=7, bg="#14141a", fg=SUB, insertbackground=FG,
                            relief="flat", font=("Consolas", 9), wrap="none")

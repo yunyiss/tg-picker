@@ -52,6 +52,7 @@
   "cell.no_preview": "No preview",
   "cell.loading": "…",
 
+  "cache.setup.title": "① Cache & settings",
   "cache.setup.tdata_label": "tdata folder",
   "cache.setup.passcode_label": "Passcode",
   "cache.setup.hint": "Leave empty if unset · source tdata is read-only",
@@ -60,6 +61,7 @@
   "cache.setup.clean_btn": "Clear cache",
   "cache.setup.formats_label": "Output types",
 
+  "cache.toolbar.title": "② Filter & select",
   "cache.toolbar.export_label": "Save content",
   "cache.toolbar.sort_label": "Sort",
   "cache.toolbar.gear_label": "Performance",
