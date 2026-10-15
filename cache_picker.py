@@ -1006,6 +1006,7 @@ class CacheApp(LangMixin):
         self.cells_by_slot.clear()
         self.thumbs_ready = 0
         self.hover_slot = None
+        self.last_click = None            # 列表已被清空：旧下标不再有效
         self._last_scrollregion = None
         for cell in self.cell_pool:
             self._hide_cell(cell)
@@ -1057,6 +1058,10 @@ class CacheApp(LangMixin):
         else:
             items.sort(key=lambda x: (x.entry.label, x.entry.rel))
         self.items = items
+        # 列表一旦被换掉，``last_click`` 记的**旧下标**就不再代表同一条媒体（条数还可能
+        # 变少）；这里一律作废，避免 Shift 连选按旧下标越界取 ``self.items[i]``
+        # （``_on_click`` 另有上界钳制兜底）。
+        self.last_click = None
 
     # ------------------------- 虚拟化渲染 -------------------------
     def _on_canvas_configure(self, event) -> None:
@@ -1524,6 +1529,7 @@ class CacheApp(LangMixin):
         shift = bool(event.state & 0x0001)
         if shift and self.last_click is not None:
             lo, hi = sorted((self.last_click, idx))
+            hi = min(hi, len(self.items) - 1)     # 兜底：锚点下标可能大于当前条数
             turn_on = rel not in self.selected
             for i in range(lo, hi + 1):
                 r = str(self.items[i].entry.rel)

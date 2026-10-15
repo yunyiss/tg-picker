@@ -1161,6 +1161,7 @@ class App(LangMixin):
         """清空当前结果并从头加载一批媒体。"""
         self.items.clear()
         self.by_id.clear()
+        self.last_click = None            # 旧下标失效，避免 Shift 连选越界
         for w in self.inner.winfo_children():
             w.destroy()
         self.next_offset = 0
@@ -1325,6 +1326,7 @@ class App(LangMixin):
         idx = self.items.index(it)
         if event.state & 0x0001 and self.last_click is not None:
             lo, hi = sorted((self.last_click, idx))
+            hi = min(hi, len(self.items) - 1)     # 兜底：锚点下标可能大于当前条数
             turn_on = not it.selected
             for i in range(lo, hi + 1):
                 self.set_selected(self.items[i], turn_on)

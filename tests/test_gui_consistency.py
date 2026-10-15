@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import datetime
 import tkinter as tk
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import cache_picker as cp
+import cache_source as cs
 import i18n
 import tg_picker as tp
 import ui_kit
@@ -302,3 +304,54 @@ def test_online_grid_centered_with_spacer_columns(tk_root, monkeypatch):
         assert int(app.inner.grid_columnconfigure(narrow + 1)["weight"]) == 1
     finally:
         app._on_close()
+
+
+def _cache_item(rel: str) -> cp.MediaItem:
+    """构造一条最小的缓存媒体（只为校验"下标→身份"用，不碰磁盘）。"""
+    return cp.MediaItem(entry=cs.CacheEntry(
+        cache_path=Path("dummy"), rel=rel, label="cache", mtime=1_700_000_000.0,
+        enc_size=100, kind="image", ext=".jpg", size=100, thumb_key=rel))
+
+
+@pytest.mark.gui
+def test_cache_shift_click_after_list_shrinks_does_not_crash(tk_root):
+    """回归（N6）：列表变短后 ``last_click`` 仍指向旧下标时，Shift 连选不得越界。
+
+    ``last_click`` 记的是"条目在**当时**列表里的下标"，而筛选 / 排序 / 重扫都会换掉
+    ``self.items``（条数还可能变少）。旧实现直接 ``range(lo, hi+1)`` 取
+    ``self.items[i]``，越界会抛 ``IndexError``（修复前本用例可稳定复现）。
+    """
+    i18n.set_language("zh")
+    app = cp.CacheApp(tk_root)
+    app.items = [_cache_item(f"r{i}") for i in range(5)]
+    app.all_items = list(app.items)
+    app.columns = 5
+    app._grid_x0 = 10
+    app.last_click = 999                       # 遗留自更长的列表
+    app._on_click(SimpleNamespace(x=10, y=30, state=0x0001))    # 修复前：IndexError
+    assert all(str(it.entry.rel) in app.selected for it in app.items), "应选中所点条目"
+
+    app.on_filter_change()                     # 换列表（筛选 / 排序）
+    assert app.last_click is None, "列表重建后 last_click 应失效"
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_online_shift_click_after_reload_does_not_crash(tk_root, monkeypatch):
+    """回归（N6）：API 模式重新加载（旧下标作废）后，Shift 连选不得越界。"""
+    i18n.set_language("zh")
+    app = tp.App(tk_root)
+    items = [tp.MediaItem(msg_id=i, date=datetime.datetime(2026, 10, 10), kind="photo",
+                          size=1, file_name=None, mime="image/jpeg", msg=_FakeMsg())
+             for i in range(5)]
+    for it in items:
+        app.add_item_cell(it)
+    app.items = list(items)
+    app.last_click = 999                       # 遗留自上一批（条数更多）
+    app.on_cell_click(SimpleNamespace(state=0x0001), items[0])   # 修复前：IndexError
+    assert items[0].selected
+
+    monkeypatch.setattr(app, "_do_load", lambda more: None)
+    app.on_load()                              # 重新加载：旧下标必须作废
+    assert app.last_click is None, "重新加载后 last_click 应失效"
+    app._on_close()
