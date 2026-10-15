@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-10-16（修复：Release 作业失败——gh 没有 git 上下文）
+
+### 修复 · release 作业补 checkout 与 `--repo`（`gh release create` 报 "not a git repository"）
+- **现象**：打 tag `v0.1.0` 后，`gate` / `build (ubuntu)` / `build (windows)` **全部成功**、两个 zip 也都
+  上传了，但最后的 `attach to release` 作业失败，日志只有一行
+  `failed to run git: fatal: not a git repository (or any of the parent directories): .git`，
+  于**没有建成 Release**（所以那段说明也无处可贴）。
+- **原因**：该作业只做了 `download-artifact`、**没有 checkout**，工作目录里没有 `.git`；而 `gh` 需要靠 git
+  上下文推断"这是哪个仓库"，推断失败即报错退出。
+- **修改**：release 作业加 `actions/checkout@v4`，并给 `gh release create` 显式加
+  `--repo "${{ github.repository }}"`（双保险，不依赖隐式推断）。
+- **验证**：对照失败作业的完整日志定位到该行；改动为纯 CI 配置（无代码影响）。
+
 ## 2026-10-16（发布：先只出 Windows / Linux 两个平台的包）
 
 ### 发布 · release 的 matrix 去掉 macOS（待实机验证后再加入）
