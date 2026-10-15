@@ -899,10 +899,6 @@ class App(LangMixin):
             elif it.thumb_failed:
                 it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"))
 
-    def _divider(self) -> None:
-        """一条 1px 分隔线，用于划分区域（与缓存模式同款）。"""
-        ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
-
     def _build_langbar(self) -> None:
         """顶部标题栏：左侧模式标题，右侧语言切换（与缓存模式同一版式）。"""
         bar = ttk.Frame(self.root, padding=(16, 8, 16, 4), style="Panel.TFrame")
@@ -1043,17 +1039,6 @@ class App(LangMixin):
             "online.empty_hint")
         self._empty_shown = False
         self._update_empty_hint()
-
-    def _update_empty_hint(self) -> None:
-        """无内容时显示空状态提示，有内容时隐藏（两种模式同一交互）。"""
-        show = not self.items
-        if show == self._empty_shown:
-            return
-        if show:
-            self.l_empty.place(relx=0.5, rely=0.5, anchor="center")
-        else:
-            self.l_empty.place_forget()
-        self._empty_shown = show
 
     def _build_actions(self) -> None:
         """底部操作区：两行版式，与缓存模式完全一致。
@@ -1502,15 +1487,6 @@ class App(LangMixin):
             except Exception:
                 traceback.print_exc()
         self._pump_job = self.root.after(PUMP_MS, self._pump)
-
-    def _handle(self, msg: tuple) -> None:
-        """按消息类型分发到 ``self._msg_<类型>``；未定义的类型直接忽略。
-
-        消息由 Worker 线程经 ``ui_q`` 投递，统一在这里（主线程）消费。
-        """
-        handler = getattr(self, f"_msg_{msg[0]}", None)
-        if handler is not None:
-            handler(msg)
 
     def _msg_log(self, msg: tuple) -> None:
         """后台日志：原样追加到日志框。"""

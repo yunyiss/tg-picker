@@ -447,9 +447,7 @@ class CacheApp(LangMixin):
                arrowcolor=[("active", FG)])
 
     # ---------- 顶部标题栏 ----------
-    def _divider(self) -> None:
-        """一条 1px 分隔线，用于划分区域。"""
-        ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
+    # _divider 已收敛到 ui_lang.LangMixin（两模式逐字相同）
 
     # ---------- i18n（差异部分；通用机制见 ui_lang.LangMixin）----------
     def _window_title(self) -> str:
@@ -772,17 +770,6 @@ class CacheApp(LangMixin):
             "cache.empty_hint")
         self._empty_shown = False
         self._update_empty_hint()
-
-    def _update_empty_hint(self) -> None:
-        """无内容时显示空状态提示，有内容时隐藏（两种模式同一交互）。"""
-        show = not self.items
-        if show == self._empty_shown:
-            return
-        if show:
-            self.l_empty.place(relx=0.5, rely=0.5, anchor="center")
-        else:
-            self.l_empty.place_forget()
-        self._empty_shown = show
 
     def _build_statusbar(self) -> None:
         # 状态栏底色与 API 模式一致（BAR）；状态在右、进度在左
@@ -1791,15 +1778,6 @@ class CacheApp(LangMixin):
         except Exception:
             traceback.print_exc()
         self._pump_job = self.root.after(PUMP_MS, self._pump)
-
-    def _handle(self, msg: tuple) -> None:
-        """按消息类型分发到 ``self._msg_<类型>``；未定义的类型直接忽略。
-
-        消息由后台线程经 ``ui_q`` 投递，统一在这里（主线程）消费。
-        """
-        handler = getattr(self, f"_msg_{msg[0]}", None)
-        if handler is not None:
-            handler(msg)
 
     def _msg_load_progress(self, msg: tuple) -> None:
         """索引进度：更新进度条与状态栏（文案按当前语言渲染，随语言切换重放）。"""

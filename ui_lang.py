@@ -8,6 +8,10 @@
   （如"已选 N 个"、Canvas 角标、占据位符的单元格文字）；
 - :meth:`LangMixin._idle_status` —— 空闲时状态栏显示的文案。
 
+另外，两模式**逐字相同**的几处界面骨架方法——消息分发 :meth:`LangMixin._handle`、
+分隔线 :meth:`LangMixin._divider`、空状态 :meth:`LangMixin._update_empty_hint`
+——也收敛在这里，避免两份实现各自漂移。
+
 另一条约定：状态栏内容以 ``(语言键, 参数)`` 记录并可**按新语言原样重放**，
 这样停留在"保存中 3/10"这类动态文本上时切换语言也能正确刷新。
 """
@@ -42,6 +46,9 @@ class LangMixin:
     root: tk.Tk
     busy: bool
     l_status: ttk.Label
+    items: list
+    l_empty: ttk.Label
+    _empty_shown: bool
 
     # ---- 生命周期 ----
     def _init_lang_support(self) -> None:
@@ -136,3 +143,28 @@ class LangMixin:
             self.l_status.configure(text=self._status_fn())
         elif not self.busy:
             self.l_status.configure(text=self._idle_status())
+
+    # ---- 两模式逐字相同的界面骨架方法（收敛到此处，避免两份实现漂移）----
+    def _handle(self, msg: tuple) -> None:
+        """按消息类型分发到 ``self._msg_<类型>``；未定义的类型直接忽略。
+
+        消息由后台线程经 ``ui_q`` 投递，统一在这里（主线程）消费。
+        """
+        handler = getattr(self, f"_msg_{msg[0]}", None)
+        if handler is not None:
+            handler(msg)
+
+    def _divider(self) -> None:
+        """一条 1px 分隔线，用于划分区域。"""
+        ttk.Frame(self.root, style="Sep.TFrame", height=1).pack(fill="x", side="top")
+
+    def _update_empty_hint(self) -> None:
+        """无内容时显示空状态提示，有内容时隐藏（两种模式同一交互）。"""
+        show = not self.items
+        if show == self._empty_shown:
+            return
+        if show:
+            self.l_empty.place(relx=0.5, rely=0.5, anchor="center")
+        else:
+            self.l_empty.place_forget()
+        self._empty_shown = show
