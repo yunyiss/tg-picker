@@ -982,6 +982,10 @@ class App(LangMixin):
         self.canvas.bind("<Configure>", self._on_canvas_resize)
         self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
         self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+        # X11（Linux）的滚轮事件是 Button-4/5，**不是** <MouseWheel>；画布（网格空白区）
+        # 也要绑一份，否则 Linux 下指针停在网格上完全滚不动（只能拖滚动条）。
+        self.canvas.bind("<Button-4>", lambda e: self._scroll_units(-1))
+        self.canvas.bind("<Button-5>", lambda e: self._scroll_units(1))
 
         # 空状态：无内容时在网格区居中显示的内联提示（与缓存模式同一风格）
         self.l_empty = self._T(
@@ -1243,8 +1247,12 @@ class App(LangMixin):
         cell.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
         cell.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
         cell.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
-        # 滚轮落在卡片上时也能滚动（画布仅在指针进入空白区时才 bind_all）
+        # 滚轮落在卡片上时也能滚动（画布仅在指针进入空白区时才 bind_all）；
+        # X11 的滚轮是 Button-4/5，而指针进入卡片会让画布解绑 bind_all，
+        # 所以卡片必须自己绑这两个——否则 Linux 下停在缩略图上完全滚不动。
         cell.bind("<MouseWheel>", self._on_wheel)
+        cell.bind("<Button-4>", lambda e: self._scroll_units(-1))
+        cell.bind("<Button-5>", lambda e: self._scroll_units(1))
 
     def _video_placeholder(self) -> ImageTk.PhotoImage | None:
         """视频的灰色占位图（封面/首帧取不到或尚在加载时使用），只生成一次并复用。"""
@@ -1423,6 +1431,10 @@ class App(LangMixin):
 
     def _on_wheel(self, event) -> None:
         self.canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+    def _scroll_units(self, units: int) -> None:
+        """按「单位」滚动网格：X11 的 Button-4/5 走这里，步长与 <MouseWheel> 保持一致。"""
+        self.canvas.yview_scroll(units, "units")
 
     # ---------- 队列轮询 ----------
     def _pump(self) -> None:

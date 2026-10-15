@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-10-16（修复：Linux 下 API 模式网格滚轮失效）
+
+### 修复 · API 模式补上 X11 的滚轮绑定
+- **现象**：Linux 打包版实测——API 模式下鼠标停在缩略图网格/卡片上**完全滚不动**，只能拖
+  右侧滚动条；缓存模式正常。
+- **原因**：X11（Linux）的滚轮事件是 `Button-4`/`Button-5`，**不是** `<MouseWheel>`（后者只在
+  Windows/macOS 触发）。缓存模式两套都绑了，API 模式只绑了 `<MouseWheel>`；而且 API 的卡片是
+  独立子控件——指针进卡片会让画布解绑 `bind_all`，所以卡片还必须自己绑。
+- **修改**：`tg_picker` 的画布与每个卡片各补 `Button-4/5`（步长与 `<MouseWheel>` 一致、每格
+  1 单位），并抽出与缓存模式同名同义的 `_scroll_units()`。
+- **验证**：新增跨模式断言（两模式画布 + API 卡片都必须绑 Button-4/5）；
+  `ruff` / `mypy`（6 files）/ `pytest` 全绿。
+
 ## 2026-10-16（修复：Linux/mac 打包后缩略图全部不显示）
 
 ### 修复 · 打包缺 `PIL._tkinter_finder`，缩略图与视频占位全不显示（Linux/macOS）

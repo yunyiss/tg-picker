@@ -429,3 +429,23 @@ def test_online_shift_click_after_reload_does_not_crash(tk_root, monkeypatch):
     app.on_load()                              # 重新加载：旧下标必须作废
     assert app.last_click is None, "重新加载后 last_click 应失效"
     app._on_close()
+
+
+@pytest.mark.gui
+def test_both_modes_bind_linux_mouse_wheel(two_apps):
+    """回归：X11（Linux）的滚轮是 Button-4/5，**不是** <MouseWheel>。
+
+    此前只有缓存模式绑了这两个；API 模式只绑 <MouseWheel> → Linux 下指针停在缩略图
+    网格或卡片上**完全滚不动**，只能拖滚动条（实测于 Linux 打包版）。
+    """
+    cache_app, online_app = two_apps
+    for name, canvas in (("缓存", cache_app.canvas), ("API", online_app.canvas)):
+        assert canvas.bind("<Button-4>"), f"{name}模式画布未绑 Button-4（Linux 上滚）"
+        assert canvas.bind("<Button-5>"), f"{name}模式画布未绑 Button-5（Linux 下滚）"
+
+    # API 的卡片是独立子控件：指针进入卡片会让画布解绑 bind_all，故卡片必须自己绑
+    it = tp.MediaItem(msg_id=1, date=datetime.datetime(2026, 10, 10), kind="photo",
+                      size=2048, file_name=None, mime="image/jpeg", msg=_FakeMsg())
+    online_app.add_item_cell(it)
+    assert it.cell.bind("<Button-4>"), "API 卡片未绑 Button-4"
+    assert it.cell.bind("<Button-5>"), "API 卡片未绑 Button-5"
