@@ -8,6 +8,7 @@ from __future__ import annotations
 import datetime
 import tkinter as tk
 from pathlib import Path
+from tkinter import ttk
 from types import SimpleNamespace
 
 import pytest
@@ -162,6 +163,22 @@ def test_progressbar_style_is_shared(two_apps):
     cache_app, online_app = two_apps
     assert cache_app.pb.cget("style") == online_app.pb.cget("style") == \
         ui_style.PROGRESS_STYLE
+
+
+@pytest.mark.gui
+def test_secondary_label_style_is_shared(two_apps):
+    """2-2：次级标签样式 ``Sub.TLabel`` 已统一注册、解析为二级文字色。
+
+    回归：缓存模式的筛选栏标签引用了**未注册**的 ``Sub.TLabel``，会静默回退成
+    ``TLabel`` 的一级文字色（偏亮），与 API 模式不一致。
+    """
+    cache_app, _online_app = two_apps
+    st = ttk.Style()
+    assert st.lookup("Sub.TLabel", "foreground") == ui_style.SUB
+    # 缓存筛选栏确实在使用这个次级样式（修复前它未被注册 → 回退成一级色）
+    used = [str(w.cget("style")) for w in cache_app.e_search.master.winfo_children()
+            if str(w.winfo_class()) == "TLabel"]
+    assert "Sub.TLabel" in used, used
 
 
 @pytest.mark.gui

@@ -90,3 +90,98 @@ def register_progressbar(st: ttk.Style) -> str:
                  bordercolor="#14141a", lightcolor=ACCENT, darkcolor=ACCENT)
     st.map(PROGRESS_STYLE, background=[("disabled", "#2b2b33")])
     return PROGRESS_STYLE
+
+
+# ---------------------------------------------------------------------------
+# 两个模式**共用**的 ttk 样式（原先两个界面各自注册一份、逐字重复）。
+#
+# 差异项由各界面另行声明：滚动条配色（两模式不同）。
+# ---------------------------------------------------------------------------
+def register_common(st: ttk.Style) -> None:
+    """注册两个挑选器共用的容器 / 文字色阶 / 按钮 / 输入框 / 复选样式。
+
+    内容与原两处实现逐项相同（缓存侧零视觉变化）；``Sub.TLabel`` 是二级文字色阶，
+    此前缓存模式引用了它却**未注册**，会静默回退成 ``TLabel`` 的一级文字色——
+    统一注册后两模式的次级标签颜色随之对齐。
+    """
+    # 容器：内容区 / 面板 / 状态栏 / 分隔线，靠明度差分档
+    st.configure("TFrame", background=BG)
+    st.configure("Panel.TFrame", background=PANEL)
+    st.configure("Bar.TFrame", background=BAR)
+    st.configure("Sep.TFrame", background=SEP)
+    # 文字三级色阶（不再出现多种杂灰）
+    st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
+    st.configure("Title.TLabel", background=PANEL, foreground=FG,
+                 font=(FONT, 12, "bold"))
+    st.configure("Section.TLabel", background=PANEL, foreground=FG,
+                 font=(FONT, 11, "bold"))
+    st.configure("Sub.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
+    st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
+    st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
+    st.configure("Count.TLabel", background=PANEL, foreground=ACCENT,
+                 font=(FONT, 10, "bold"))
+    st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
+    # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
+    st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
+    # 按钮：统一高度，压掉 clam 的立体边框
+    st.configure("TButton", font=(FONT, 9), padding=(12, 6),
+                 background=BTN, foreground=FG,
+                 borderwidth=0, focusthickness=0, relief="flat",
+                 bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
+    st.map("TButton",
+           background=[("pressed", "#3a3a44"), ("active", "#383842"),
+                       ("disabled", PANEL)],
+           foreground=[("disabled", MUTED)],
+           bordercolor=[("active", BTN)], lightcolor=[("active", BTN)],
+           darkcolor=[("active", BTN)])
+    # 主按钮
+    st.configure("Accent.TButton", font=(FONT, 10, "bold"), padding=(18, 6),
+                 background=ACCENT, foreground="#ffffff",
+                 borderwidth=0, relief="flat",
+                 bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
+    st.map("Accent.TButton",
+           background=[("pressed", "#2f6fd8"), ("active", ACCENT_HOVER),
+                       ("disabled", ACCENT_DIM)],
+           foreground=[("disabled", "#93a7c4")],
+           bordercolor=[("active", ACCENT_HOVER)],
+           lightcolor=[("active", ACCENT_HOVER)],
+           darkcolor=[("active", ACCENT_HOVER)])
+    # 输入框 / 下拉框：显式压掉 clam 的浅色描边
+    st.configure("TEntry", fieldbackground=FIELD, foreground=FG, insertcolor=FG,
+                 borderwidth=1, padding=5, relief="flat",
+                 bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
+    st.map("TEntry",
+           fieldbackground=[("disabled", PANEL), ("focus", FIELD)],
+           foreground=[("disabled", MUTED)],
+           bordercolor=[("focus", ACCENT)],
+           lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
+    st.configure("TCombobox", fieldbackground=FIELD, background=FIELD,
+                 foreground=FG, arrowcolor=SUB, borderwidth=1, padding=4,
+                 relief="flat", bordercolor=BORDER,
+                 lightcolor=BORDER, darkcolor=BORDER)
+    st.map("TCombobox",
+           fieldbackground=[("readonly", FIELD)],
+           foreground=[("readonly", FG)],
+           bordercolor=[("focus", ACCENT)],
+           lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
+    # 复选框（clam 的 indicator 用 upper/lowerbordercolor 才生效）
+    st.configure("TCheckbutton", background=PANEL, foreground=FG,
+                 font=(FONT, 9), focusthickness=0, focuscolor=PANEL,
+                 indicatorbackground=FIELD, indicatorforeground=ACCENT,
+                 upperbordercolor=BORDER, lowerbordercolor=BORDER,
+                 indicatorsize=13)
+    st.map("TCheckbutton",
+           background=[("active", PANEL)],
+           foreground=[("active", FG)],
+           indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
+           indicatorforeground=[("selected", "#ffffff")],
+           upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
+           lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
+
+
+def combobox_listbox_colors(root: tk.Misc) -> None:
+    """让下拉列表（Tk 的 Listbox）也跟随深色主题（``option_add`` 需要 root）。"""
+    root.option_add("*TCombobox*Listbox.background", FIELD)
+    root.option_add("*TCombobox*Listbox.foreground", FG)
+    root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+    root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")

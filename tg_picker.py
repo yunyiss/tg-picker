@@ -66,20 +66,13 @@ from ui_kit import (
 from ui_lang import LangMixin
 from ui_style import (
     ACCENT,
-    ACCENT_DIM,
     ACCENT_HOVER,
-    BAR,
     BG,
-    BORDER,
     BTN,
     CARD,
     CARD_HOVER,
     CARD_SEL,
     FG,
-    FIELD,
-    MUTED,
-    PANEL,
-    SEP,
     SUB,
 )
 
@@ -780,99 +773,31 @@ class App(LangMixin):
 
     # ---------- 样式与布局 ----------
     def _build_style(self) -> None:
-        """ttk 样式：与缓存挑选器**同一套**深色主题（面板 / 文字三级色阶 / 扁平控件）。
+        """ttk 样式：公共部分下沉到 ``ui_style``，这里只补本模式的差异项。
 
-        clam 的输入框描边、滚动条、进度条、复选框指示块都由**自绘图片**构成，
-        只设 ``background`` 会留下浅色边缘；因此输入框 / 复选 / 滚动条都要连
-        ``bordercolor`` / ``lightcolor`` / ``darkcolor`` 一起覆盖（复选还要
-        ``upperbordercolor`` / ``lowerbordercolor``）。
+        与缓存挑选器**同一套**深色主题（面板 / 文字三级色阶 / 扁平控件）；clam 的
+        输入框描边、复选框指示块、进度条都由自绘图片构成，覆盖逻辑随
+        ``ui_style.register_common`` / ``register_progressbar`` 一并下沉，避免两处漂移。
         """
         st = ttk.Style()
         ui_style.use_clam(st)
-        # 容器：内容区 BG / 面板 PANEL / 状态栏 BAR / 分隔线 SEP
-        st.configure("TFrame", background=BG)
-        st.configure("Panel.TFrame", background=PANEL)
-        st.configure("Bar.TFrame", background=BAR)
-        st.configure("Sep.TFrame", background=SEP)
-        # 文字三级色阶（标签底随所在面板）；标题/分区标题与缓存模式同款
-        st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
-        st.configure("Title.TLabel", background=PANEL, foreground=FG,
-                     font=(FONT, 12, "bold"))
-        st.configure("Section.TLabel", background=PANEL, foreground=FG,
-                     font=(FONT, 11, "bold"))
-        st.configure("Sub.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
-        st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
-        st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
-        st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
-        st.configure("Count.TLabel", background=PANEL, foreground=ACCENT,
-                     font=(FONT, 10, "bold"))
-        # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
-        st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
-        # 按钮：统一高度、压掉 clam 的立体边框
-        st.configure("TButton", font=(FONT, 9), padding=(12, 6),
-                     background=BTN, foreground=FG, borderwidth=0, focusthickness=0,
-                     relief="flat", bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
-        st.map("TButton",
-               background=[("pressed", "#3a3a44"), ("active", "#383842"),
-                           ("disabled", PANEL)],
-               foreground=[("disabled", MUTED)],
-               bordercolor=[("active", BTN)], lightcolor=[("active", BTN)],
-               darkcolor=[("active", BTN)])
-        st.configure("Accent.TButton", font=(FONT, 10, "bold"), padding=(18, 6),
-                     background=ACCENT, foreground="#ffffff", borderwidth=0,
-                     relief="flat", bordercolor=ACCENT, lightcolor=ACCENT,
-                     darkcolor=ACCENT)
-        st.map("Accent.TButton",
-               background=[("pressed", "#2f6fd8"), ("active", ACCENT_HOVER),
-                           ("disabled", ACCENT_DIM)],
-               foreground=[("disabled", "#93a7c4")],
-               bordercolor=[("active", ACCENT_HOVER)],
-               lightcolor=[("active", ACCENT_HOVER)],
-               darkcolor=[("active", ACCENT_HOVER)])
-        # 输入框 / 下拉框：显式压掉 clam 的浅色描边
-        st.configure("TEntry", fieldbackground=FIELD, foreground=FG, insertcolor=FG,
-                     borderwidth=1, padding=5, relief="flat",
-                     bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
-        st.map("TEntry",
-               fieldbackground=[("disabled", PANEL), ("focus", FIELD)],
-               foreground=[("disabled", MUTED)],
-               bordercolor=[("focus", ACCENT)],
-               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
-        st.configure("TCombobox", fieldbackground=FIELD, background=FIELD,
-                     foreground=FG, arrowcolor=SUB, borderwidth=1, padding=4,
-                     relief="flat", bordercolor=BORDER, lightcolor=BORDER,
-                     darkcolor=BORDER)
-        st.map("TCombobox",
-               fieldbackground=[("readonly", FIELD)], foreground=[("readonly", FG)],
-               bordercolor=[("focus", ACCENT)],
-               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
-        # 下拉列表本身（Tk 的 Listbox）也要跟着深色
-        self.root.option_add("*TCombobox*Listbox.background", FIELD)
-        self.root.option_add("*TCombobox*Listbox.foreground", FG)
-        self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
-        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-        # 复选框（clam 的 indicator 用 upper/lowerbordercolor 才生效）
-        st.configure("TCheckbutton", background=PANEL, foreground=FG, font=(FONT, 9),
-                     focusthickness=0, focuscolor=PANEL, indicatorbackground=FIELD,
-                     indicatorforeground=ACCENT, upperbordercolor=BORDER,
-                     lowerbordercolor=BORDER, indicatorsize=13)
-        st.map("TCheckbutton",
-               background=[("active", PANEL)], foreground=[("active", FG)],
-               indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
-               indicatorforeground=[("selected", "#ffffff")],
-               upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
-               lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
-        # 进度条：与缓存模式共用同一个样式名 / 配色（UI-2）；滚动条：细轨 + 深槽
+        ui_style.register_common(st)
         ui_style.register_progressbar(st)
+        ui_style.combobox_listbox_colors(self.root)
+        self._style_scrollbars(st)          # 滚动条配色两模式各不相同，各自声明
+        # 分段按钮：语言切换用（与缓存挑选器一致的表达方式）
+        ui_style.segmented_buttons(
+            st, base_bg=BTN, base_fg=SUB, hover_bg="#383842", hover_fg=FG,
+            accent=ACCENT, accent_hover=ACCENT_HOVER, padding=(14, 5))
+
+    @staticmethod
+    def _style_scrollbars(st: ttk.Style) -> None:
+        """滚动条：细轨 + 深槽（本模式配色）。"""
         st.configure("Vertical.TScrollbar", background=BTN, troughcolor=BG,
                      bordercolor=BG, arrowcolor=SUB, borderwidth=0,
                      lightcolor=BTN, darkcolor=BTN)
         st.map("Vertical.TScrollbar",
                background=[("active", "#383842"), ("pressed", "#3a3a44")])
-        # 分段按钮：语言切换用（与缓存挑选器一致的表达方式）
-        ui_style.segmented_buttons(
-            st, base_bg=BTN, base_fg=SUB, hover_bg="#383842", hover_fg=FG,
-            accent=ACCENT, accent_hover=ACCENT_HOVER, padding=(14, 5))
 
     # ---------- i18n（差异部分；通用机制见 ui_lang.LangMixin）----------
     def _window_title(self) -> str:

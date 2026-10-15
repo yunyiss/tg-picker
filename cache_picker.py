@@ -63,20 +63,15 @@ from ui_kit import (
 from ui_lang import LangMixin
 from ui_style import (
     ACCENT,
-    ACCENT_DIM,
     ACCENT_HOVER,
-    BAR,
     BG,
-    BORDER,
     BTN,
     CARD,
     CARD_HOVER,
     CARD_SEL,
     FG,
     FIELD,
-    MUTED,
     PANEL,
-    SEP,
     SUB,
 )
 
@@ -307,130 +302,22 @@ class CacheApp(LangMixin):
 
     # ------------------------- 界面 -------------------------
     def _build_style(self) -> None:
-        """统一的 ttk 样式（按控件类别拆到下面的小函数，便于定位与修改）。
+        """统一的 ttk 样式：公共部分下沉到 ``ui_style``，这里只补本模式的差异项。
 
-        关键点：clam 主题的输入框描边、滚动条、进度条都由**自绘图片**构成，
-        只设 background/foreground 会留下浅色边缘（视觉上像贴了白胶带）。
-        必须连 bordercolor / lightcolor / darkcolor 一起覆盖。
+        关键点（踩过的坑）：clam 主题的输入框描边、滚动条、进度条都由**自绘图片**
+        构成，只设 background/foreground 会留下浅色边缘（视觉上像贴了白胶带）。
+        这些覆盖已随 ``ui_style.register_common`` / ``register_progressbar`` 一并下沉。
         """
         st = ttk.Style()
         ui_style.use_clam(st)
-        self._style_containers(st)
-        self._style_labels(st)
-        self._style_buttons(st)
-        self._style_inputs(st)
-        self._style_checkbuttons(st)
-        self._style_progressbars(st)
-        self._style_scrollbars(st)
-
-    @staticmethod
-    def _style_containers(st: ttk.Style) -> None:
-        """容器：内容区 / 面板 / 筛选栏 / 分隔线，靠明度差分档。"""
-        st.configure("TFrame", background=BG)
-        st.configure("Panel.TFrame", background=PANEL)
-        st.configure("Bar.TFrame", background=BAR)
-        st.configure("Sep.TFrame", background=SEP)
-
-    @staticmethod
-    def _style_labels(st: ttk.Style) -> None:
-        """文字三级色阶（不再出现多种杂灰）。"""
-        st.configure("TLabel", background=PANEL, foreground=FG, font=(FONT, 9))
-        st.configure("Title.TLabel", background=PANEL, foreground=FG,
-                     font=(FONT, 12, "bold"))
-        st.configure("Section.TLabel", background=PANEL, foreground=FG,
-                     font=(FONT, 11, "bold"))
-        st.configure("Field.TLabel", background=PANEL, foreground=SUB, font=(FONT, 9))
-        st.configure("Hint.TLabel", background=PANEL, foreground=MUTED, font=(FONT, 8))
-        st.configure("Status.TLabel", background=PANEL, foreground=SUB, font=(FONT, 8))
-        st.configure("Count.TLabel", background=PANEL, foreground=ACCENT,
-                     font=(FONT, 10, "bold"))
-        st.configure("BarStatus.TLabel", background=BAR, foreground=SUB, font=(FONT, 8))
-        # 网格区空状态提示（底为内容区 BG，故不随 PANEL）
-        st.configure("Empty.TLabel", background=BG, foreground=SUB, font=(FONT, 10))
-
-    @staticmethod
-    def _style_buttons(st: ttk.Style) -> None:
-        """按钮：统一高度，压掉 clam 的立体边框；含主按钮与分段按钮。"""
-        st.configure("TButton", font=(FONT, 9), padding=(12, 6),
-                     background=BTN, foreground=FG,
-                     borderwidth=0, focusthickness=0, relief="flat",
-                     bordercolor=BTN, lightcolor=BTN, darkcolor=BTN)
-        st.map("TButton",
-               background=[("pressed", "#3a3a44"), ("active", "#383842"),
-                           ("disabled", PANEL)],
-               foreground=[("disabled", MUTED)],
-               bordercolor=[("active", BTN)], lightcolor=[("active", BTN)],
-               darkcolor=[("active", BTN)])
-
-        # 主按钮
-        st.configure("Accent.TButton", font=(FONT, 10, "bold"), padding=(18, 6),
-                     background=ACCENT, foreground="#ffffff",
-                     borderwidth=0, relief="flat",
-                     bordercolor=ACCENT, lightcolor=ACCENT, darkcolor=ACCENT)
-        st.map("Accent.TButton",
-               background=[("pressed", "#2f6fd8"), ("active", ACCENT_HOVER),
-                           ("disabled", ACCENT_DIM)],
-               foreground=[("disabled", "#93a7c4")],
-               bordercolor=[("active", ACCENT_HOVER)],
-               lightcolor=[("active", ACCENT_HOVER)],
-               darkcolor=[("active", ACCENT_HOVER)])
-
+        ui_style.register_common(st)
+        ui_style.register_progressbar(st)
+        ui_style.combobox_listbox_colors(self.root)
+        self._style_scrollbars(st)          # 滚动条配色两模式各不相同，各自声明
         # 分段按钮（替代 clam 无法配色的单选钮）：未选=平底，选中=蓝色实底
         ui_style.segmented_buttons(
             st, base_bg=BTN, base_fg=SUB, hover_bg="#383842", hover_fg=FG,
             accent=ACCENT, accent_hover=ACCENT_HOVER, padding=(14, 5))
-
-    def _style_inputs(self, st: ttk.Style) -> None:
-        """输入框与下拉框：显式压掉 clam 的浅色描边。"""
-        st.configure("TEntry", fieldbackground=FIELD, foreground=FG,
-                     insertcolor=FG, borderwidth=1, padding=5, relief="flat",
-                     bordercolor=BORDER, lightcolor=BORDER, darkcolor=BORDER)
-        st.map("TEntry",
-               fieldbackground=[("disabled", PANEL), ("focus", FIELD)],
-               foreground=[("disabled", MUTED)],
-               bordercolor=[("focus", ACCENT)],
-               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
-
-        st.configure("TCombobox", fieldbackground=FIELD, background=FIELD,
-                     foreground=FG, arrowcolor=SUB, borderwidth=1, padding=4,
-                     relief="flat", bordercolor=BORDER,
-                     lightcolor=BORDER, darkcolor=BORDER)
-        st.map("TCombobox",
-               fieldbackground=[("readonly", FIELD)],
-               foreground=[("readonly", FG)],
-               bordercolor=[("focus", ACCENT)],
-               lightcolor=[("focus", ACCENT)], darkcolor=[("focus", ACCENT)])
-        # 下拉列表本身（Tk 的 Listbox）也要跟着深色
-        self.root.option_add("*TCombobox*Listbox.background", FIELD)
-        self.root.option_add("*TCombobox*Listbox.foreground", FG)
-        self.root.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
-        self.root.option_add("*TCombobox*Listbox.selectForeground", "#ffffff")
-
-    @staticmethod
-    def _style_checkbuttons(st: ttk.Style) -> None:
-        """复选框。
-
-        关键：clam 的 Checkbutton.indicator 用的是
-        upperbordercolor / lowerbordercolor（不是 bordercolor/lightcolor/darkcolor）
-        ——之前只设 bordercolor 完全没生效，浅色斜面边框因此留了下来。
-        """
-        st.configure("TCheckbutton", background=PANEL, foreground=FG,
-                     font=(FONT, 9), focusthickness=0, focuscolor=PANEL,
-                     indicatorbackground=FIELD, indicatorforeground=ACCENT,
-                     upperbordercolor=BORDER, lowerbordercolor=BORDER,
-                     indicatorsize=13)
-        st.map("TCheckbutton",
-               background=[("active", PANEL)],
-               foreground=[("active", FG)],
-               indicatorbackground=[("selected", ACCENT), ("!selected", FIELD)],
-               indicatorforeground=[("selected", "#ffffff")],
-               upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
-               lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
-
-    @staticmethod
-    def _style_progressbars(st: ttk.Style) -> None:
-        """进度条：改用 ``ui_style`` 的共用定义（两模式同一样式名 / 配色，见 UI-2）。"""
-        ui_style.register_progressbar(st)
 
     @staticmethod
     def _style_scrollbars(st: ttk.Style) -> None:
@@ -496,7 +383,7 @@ class CacheApp(LangMixin):
         # 第一行：数据源 + 主操作（统一 8px 间距节奏）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
         r1.pack(fill="x")
-        self._T(ttk.Label(r1, style="Field.TLabel", width=14),
+        self._T(ttk.Label(r1, style="Sub.TLabel", width=14),
                 "cache.setup.tdata_label").pack(side="left")
         self.e_tdata = ttk.Entry(r1)
         self.e_tdata.pack(side="left", fill="x", expand=True, padx=(8, 8))
@@ -509,7 +396,7 @@ class CacheApp(LangMixin):
         # 第二行：可选密码 + 只读提示（提示只在此处出现一次）
         r2 = ttk.Frame(wrap, style="Panel.TFrame")
         r2.pack(fill="x", pady=(8, 0))
-        self._T(ttk.Label(r2, style="Field.TLabel", width=14),
+        self._T(ttk.Label(r2, style="Sub.TLabel", width=14),
                 "cache.setup.passcode_label").pack(side="left")
         self.e_pass = ttk.Entry(r2, width=16, show="*")
         self.e_pass.pack(side="left", padx=(8, 8))
@@ -526,7 +413,7 @@ class CacheApp(LangMixin):
         # 未勾选的格式在扫描时被早停跳过，不参与解密/缩略图，也不会出现在网格里。
         r3 = ttk.Frame(wrap, style="Panel.TFrame")
         r3.pack(fill="x", pady=(8, 0))
-        self._T(ttk.Label(r3, style="Field.TLabel", width=14),
+        self._T(ttk.Label(r3, style="Sub.TLabel", width=14),
                 "cache.setup.formats_label").pack(side="left", anchor="n")
         # 「全选」框：三态显示（全选 "1" / 半选 "" / 全不选 "0"），随各格式勾选实时同步。
         # ttk::checkbutton 在 Tk 8.6 不支持三态，故这一个用经典 tk.Checkbutton
@@ -707,7 +594,7 @@ class CacheApp(LangMixin):
         # 第一行：保存目标（与 API 模式操作条第 1 行同一版式）
         r1 = ttk.Frame(wrap, style="Panel.TFrame")
         r1.pack(fill="x")
-        self._T(ttk.Label(r1, style="Field.TLabel", width=14),
+        self._T(ttk.Label(r1, style="Sub.TLabel", width=14),
                 "cache.bottom.out_label").pack(side="left")
         self.e_out = ttk.Entry(r1)
         self.e_out.pack(side="left", fill="x", expand=True, padx=(8, 8))
