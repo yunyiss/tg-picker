@@ -1,5 +1,32 @@
 # 变更记录
 
+## 2026-10-16（收尾复查：首启日志重定向 / Linux 打包补 Tk / 文档一致性）
+
+### 修复 · 首启选「用户目录」时日志未随之重定向（LOG-4）
+- **现象**：pythonw 首次启动、用户在窗口里选「用户目录」时，本意"按新位置重定向日志"的第二次
+  `enable_file_log` 调用**静默空转**——该次会话的日志仍落在便携 `data/logs`，与用户选的位置不一致。
+- **原因**：函数开头用"`sys.stderr` 是否为空"来判断"有没有控制台"，但首次调用已把 `sys.stderr`
+  换成 `_LogWriter`（非 None），于是同一进程内的第二次调用被这行挡回。
+- **修改**：改为 `if sys.stderr is not None and not isinstance(sys.stderr, _LogWriter)`——仅当
+  `stderr` 是**真实控制台**时才不接管；已被本模块接管过时允许再次调用，把日志改指到新路径（不叠加 handler）。
+- **验证**：新增用例（pythonw 场景下第二次调用确改指新路径并写入）；`pytest` **109 passed**。
+
+### 修复 · Linux 发布作业缺 Tk
+- **现象/原因**：`release.yml` 的 `build` 作业未装 `python3-tk`（`gate` 作业与 `ci.yml` 都装了并注明
+  "Linux 无内置 Tk"），而它要对 `import tkinter` 的 `launcher.py` 做 PyInstaller 打包 → Linux 包很可能
+  构建失败或产出不可用包。
+- **修改**：`build` 作业补一步（`if: runner.os == 'Linux'`）安装 `python3-tk`，与 gate / CI 一致。
+- **验证**：纯 YAML 改动，本地无法执行 Actions；已逐字段核对语法与条件表达式。
+
+### 文档 · 一致性修正
+- `README.md` / `README.en.md`：§3 的会话文件名由 `tg_picker.session` 更正为实际的
+  `tg_picker_session.session`（§4 表与代码一直是对的）；英文版"3,019 media items"与中文版
+  "数千个媒体"对齐。
+- `.gitattributes` 注释里的交叉引用由已不存在的 README「开发与测试」小节改为 `DEVELOPMENT.md「八、代码风格」`。
+- `DEVELOPMENT.md` / `DEVELOPMENT.en.md`：`pyproject.toml` 的描述补上 `mypy`；英文版
+  `[README.md](README.en.md)` 的链接标签更正为与目标一致。
+- **验证**：纯文档改动；`ruff` / `mypy`（6 files）/ `pytest` 全绿（**109 passed**）。
+
 ## 2026-10-16（修复：API 下载失败残留半截文件）
 
 ### 修复 · 下载失败时输出目录不再留坏文件（N4）

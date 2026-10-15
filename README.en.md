@@ -120,7 +120,7 @@ bulk-export with another tool first.
 - **Nothing is written before you save**; saving only writes to the output folder you choose
 - There is **no "move" option** in the UI, so the cache cannot be disturbed by accident
 - The decryption core is a bundled copy of [tg-scoop](https://github.com/GarrettFynn/tg-scoop)
-  (MIT); it has successfully decoded 3,019 media items from a real local cache with 0 failures
+  (MIT); it has successfully decoded several thousand media items from a real local cache with 0 failures
 
 ### Tips
 
@@ -171,7 +171,7 @@ never scrolled past in the client).
   followed automatically
 - Gentle rate limiting and FloodWait retries are built in, but avoid pulling thousands
   of messages in a burst
-- `tg_picker.session` is equivalent to your login credentials — **do not share it**;
+- `tg_picker_session.session` is equivalent to your login credentials — **do not share it**;
   keep `api_hash` private too. Both files (plus the phone number and proxy string in
   `config.json`) are stored **unencrypted** in the data directory: on POSIX their
   permissions are tightened to `0600` after writing (the session file is hardened at

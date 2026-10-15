@@ -2,7 +2,7 @@
 
 > 🌐 Language / 语言: **English** | [中文](DEVELOPMENT.md)
 >
-> For user-facing documentation see [README.md](README.en.md). This document is for
+> For user-facing documentation see [README.en.md](README.en.md). This document is for
 > developers and maintainers: layout and files, the decryption core's boundaries, the
 > i18n implementation, testing, and packaging/release.
 
@@ -52,7 +52,7 @@ tg-picker/
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
 | `run.cmd` | Launcher script (calls `launcher.py`) |
 | `requirements.txt` / `requirements-dev.txt` | Runtime / development dependencies (pytest, ruff, mypy, PyInstaller) |
-| `pyproject.toml` | Project metadata plus ruff and pytest configuration (dependencies live only in the .txt files) |
+| `pyproject.toml` | Project metadata plus ruff, mypy and pytest configuration (dependencies live only in the .txt files) |
 | `tests/` | pytest test suite (see section 6) |
 | `LICENSE` | MIT license + third-party attribution + disclaimer |
 | `THIRD-PARTY-NOTICES.txt` | Third-party notices shipped inside the release: the bundled trimmed FFmpeg's LGPL license, source URL and rebuild recipe |

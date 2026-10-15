@@ -54,6 +54,18 @@ def test_enable_file_log_redirects_stdout_and_stderr(tmp_path, monkeypatch):
     assert "走 stderr 的一行" in text
 
 
+def test_enable_file_log_retargets_on_repeat_call(tmp_path, monkeypatch):
+    """pythonw 下重复调用应把日志改指到新路径（启动后用户改了数据目录时重定向）。"""
+    monkeypatch.setattr(ui_kit.sys, "stdout", None)
+    monkeypatch.setattr(ui_kit.sys, "stderr", None)
+    first = ui_kit.enable_file_log(tmp_path / "a" / "x.log")
+    assert first == tmp_path / "a" / "x.log"
+    second = ui_kit.enable_file_log(tmp_path / "b" / "x.log")
+    assert second == tmp_path / "b" / "x.log", "第二次调用应改指新路径，而不是空转"
+    print("切换目录后的日志")
+    assert "切换目录后的日志" in (tmp_path / "b" / "x.log").read_text(encoding="utf-8")
+
+
 def test_enable_file_log_rotates(tmp_path, monkeypatch):
     """日志超过单文件上限时轮转为 .1（避免日志无限增长）。"""
     monkeypatch.setattr(ui_kit.sys, "stdout", None)

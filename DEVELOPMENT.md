@@ -49,7 +49,7 @@ tg-picker/
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run.cmd` | 启动脚本（调用 `launcher.py`） |
 | `requirements.txt` / `requirements-dev.txt` | 运行依赖 / 开发测试依赖（pytest、ruff、mypy、PyInstaller） |
-| `pyproject.toml` | 项目元数据与 ruff、pytest 配置（依赖只在上面的 txt 里声明） |
+| `pyproject.toml` | 项目元数据与 ruff、mypy、pytest 配置（依赖只在上面的 txt 里声明） |
 | `tests/` | pytest 测试套件（详见「六、运行测试」） |
 | `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
 | `THIRD-PARTY-NOTICES.txt` | 发布包内第三方声明：内置裁剪版 ffmpeg 的 LGPL 许可、源码地址与重建配方（随包分发） |

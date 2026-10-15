@@ -58,6 +58,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: 安装 Tk（Linux；PyInstaller 需能 import tkinter 才能收集 Tcl/Tk）
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y python3-tk
+
       - name: 安装 ffmpeg 构建工具（Linux）
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y build-essential nasm

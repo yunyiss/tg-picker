@@ -138,7 +138,7 @@ python -m venv .venv
 
 - 私密频道需要你的账号**已是成员**；邀请链接会自动尝试加入
 - 内置温和控速与 FloodWait 重试，仍建议不要短时间狂拉数千条
-- `tg_picker.session` 等同于登录凭证，**不要拷贝给别人**；api_hash 也不要外发。
+- `tg_picker_session.session` 等同于登录凭证，**不要拷贝给别人**；api_hash 也不要外发。
   这两个文件（以及 `config.json` 里的手机号 / 代理串）都**未加密**保存在数据目录里：
   POSIX 上写入后会把权限收紧到 `0600`（会话文件在启动时与每次登录成功后各收一次）。
   **Windows 上 `os.chmod` 只能切换只读位、无法限制其它用户**，所以 Windows 下请依赖数据目录自身的

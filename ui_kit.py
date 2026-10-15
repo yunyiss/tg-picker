@@ -287,11 +287,15 @@ def enable_file_log(log_path: Path) -> Path | None:
     - 批处理的重定向依赖句柄继承与引号，在 Windows 上很容易出岔子——本项目刚因为
       ``.cmd`` 里的非 ASCII 踩过坑，这里不再让 shell 承担这类职责。
 
-    只在**没有控制台**时接管（``sys.stderr is None``）；从终端用 ``python.exe`` 运行时
-    保留控制台输出，方便开发调试。用 :class:`~logging.handlers.RotatingFileHandler`
-    做轮转，避免日志无限增长。返回日志文件路径；未接管时返回 ``None``。
+    只在**没有控制台**时接管（``sys.stderr`` 为 ``None``，或已被本函数接过）；
+    从终端用 ``python.exe`` 运行时保留控制台输出，方便开发调试。重复调用（例如启动后
+    用户又改了数据目录、需要把日志改指到新位置）会把日志**改指到新路径**且不叠加 handler；
+    用 :class:`~logging.handlers.RotatingFileHandler` 做轮转，避免日志无限增长。
+    返回日志文件路径；未接管时返回 ``None``。
     """
-    if sys.stderr is not None:
+    # 有真实控制台（python.exe）时不接管；但若 stdout/stderr 已是本模块的 _LogWriter，
+    # 说明此前已接管过——此时允许再次调用，把日志改指到新路径（见上）。
+    if sys.stderr is not None and not isinstance(sys.stderr, _LogWriter):
         return None
     log_path = Path(log_path)
     log_path.parent.mkdir(parents=True, exist_ok=True)

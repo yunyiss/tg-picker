@@ -1,6 +1,6 @@
 # 统一换行符：源码与配置一律 LF；Windows 批处理必须是 CRLF（否则 cmd 解析可能出问题）。
 #
-# 首次引入本文件后需要做一次性归一（详见 README「开发与测试」）：
+# 首次引入本文件后需要做一次性归一（详见 DEVELOPMENT.md「八、代码风格」）：
 #     git add --renormalize .
 #     git commit -m "chore: 统一换行符为 LF"
 #
