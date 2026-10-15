@@ -1275,7 +1275,8 @@ class CacheApp(LangMixin):
     def _make_video_placeholder(self) -> ImageTk.PhotoImage | None:
         try:
             return ImageTk.PhotoImage(video_placeholder())
-        except Exception:
+        except Exception as exc:
+            _log.warning("视频占位图转 Tk 图像失败：%s", exc)
             return None
 
     def _request_thumb(self, idx: int, it: MediaItem) -> None:
@@ -1319,7 +1320,8 @@ class CacheApp(LangMixin):
                 # 明文超过上限、无法整份解密：占位图照旧，但留一条日志说明原因
                 _log.warning("生成缩略图跳过（明文过大）：%s：%s", rel, exc)
                 self.photo_queue.put((idx, rel, None, kind))
-            except Exception:
+            except Exception as exc:
+                _log.warning("生成缩略图失败：%s（%s）", rel, exc)
                 self.photo_queue.put((idx, rel, None, kind))
 
         self.pool.submit(work)
@@ -1364,7 +1366,10 @@ class CacheApp(LangMixin):
                 self.thumb_mem.move_to_end(idx)
                 self.thumbs_ready += 1
                 changed = True
-            except Exception:
+            except Exception as exc:
+                # 静默吞掉会让"缩略图全都不显示"彻底无从排查（打包缺
+                # PIL._tkinter_finder 就是这么被漏掉的），所以这里必须留痕。
+                _log.warning("缩略图转 Tk 图像失败：%s（%s）", self.items[idx].entry.rel, exc)
                 self.thumb_failed.add(idx)
         if changed:
             self._evict_thumbs()

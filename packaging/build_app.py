@@ -22,6 +22,11 @@ HIDDEN = [
     "cache_picker", "tg_picker", "cache_source",
     "ui_kit", "ui_lang", "ui_style", "i18n", "app_paths", "firstrun",
     "Crypto", "Crypto.Cipher.AES",
+    # Pillow 的 ImageTk 是在 PhotoImage() 里**惰性**导入它的；PyInstaller 的 hook
+    # 在 Linux 上不会自动带上这个模块，于是打包后每次 PIL→Tk 转换都会抛
+    # ModuleNotFoundError（被上层静默吞掉）→ 缩略图与视频占位全部显示不出来。
+    # Windows 因 hook 差异会顺带收集到，所以只暴露在 Linux/macOS 上，必须显式列出。
+    "PIL._tkinter_finder",
 ]
 
 # 开发/构建期模块，发布包一律排除（不进用户包）

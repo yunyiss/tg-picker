@@ -26,3 +26,15 @@ def test_third_party_notices_covers_bundled_ffmpeg():
     assert "ffmpeg.org" in notice, "应给出 ffmpeg 源码获取地址"
     assert "build_ffmpeg.sh" in notice, "应说明如何用仓库里的配方重建同一份二进制"
     assert (ROOT / "LICENSE").is_file(), "仓库根应有 LICENSE（会随包分发）"
+
+
+def test_build_collects_pillow_tk_bridge():
+    """回归（Linux/mac 打包后缩略图全不显示）：必须显式收集 PIL._tkinter_finder。
+
+    Pillow 的 ``ImageTk`` 是在 ``PhotoImage()`` 里**惰性**导入这个模块的；PyInstaller
+    的 hook 在 Linux 上不会自动带上它，于是打包后每次 PIL→Tk 转换都抛
+    ``ModuleNotFoundError``、被上层静默吞掉 → 缩略图与视频占位全部显示不出来
+    （Windows 因 hook 差异会顺带收集，故未暴露）。这里用源码级断言把它钉住。
+    """
+    script = (ROOT / "packaging" / "build_app.py").read_text(encoding="utf-8")
+    assert '"PIL._tkinter_finder"' in script, "build_app.py 必须显式收集 PIL._tkinter_finder"

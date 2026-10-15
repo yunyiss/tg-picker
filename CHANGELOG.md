@@ -1,5 +1,24 @@
 # 变更记录
 
+## 2026-10-16（修复：Linux/mac 打包后缩略图全部不显示）
+
+### 修复 · 打包缺 `PIL._tkinter_finder`，缩略图与视频占位全不显示（Linux/macOS）
+- **现象**：Linux 打包版里缓存模式与 API 模式的缩略图**一张都不显示**——卡片全空、连视频的
+  灰色占位也没有；而同一份源码在本机（venv）跑完全正常，Windows 打包版也正常。
+- **原因**：Pillow 的 `ImageTk` 是在 `PhotoImage()` 里**惰性**导入 `PIL._tkinter_finder` 的，
+  而 PyInstaller 在 Linux 上不会自动收集该模块 → 每次 PIL→Tk 转换都抛 `ModuleNotFoundError`，
+  又被 `except Exception` 静默吞掉 → 缩略图与占位全部缺失。Windows 因 hook 差异会顺带收集到，
+  所以只在 Linux/macOS 暴露。
+- **修改**：`packaging/build_app.py` 的 `HIDDEN` 显式加入 `PIL._tkinter_finder`。
+- **验证**：在真实 Linux（Kali，glibc 2.43）用同一份源码重打并自动跑一遍：修复前每次转换都报
+  `No module named 'PIL._tkinter_finder'`；修复后诊断输出为空、**缩略图 14/14 全部显示**
+  （含 4 张由内置 ffmpeg 抽出的视频帧）。新增源码级断言 `test_build_collects_pillow_tk_bridge`。
+
+### 修复 · 缩略图管线失败不再静默（可诊断性）
+- `cache_picker` 里三处吞异常的 `except Exception`（PIL→Tk 转换、视频占位图转换、后台生成
+  缩略图）各补一条 warning 日志——正是这次"缩略图全不显示却查不到原因"的根源。
+- **验证**：`ruff` / `mypy`（6 files）/ `pytest` 全绿。
+
 ## 2026-10-16（收尾复查·第二批：空输入校验 + 扫描失败留痕）
 
 ### 修复 · 空输入未校验、提示不准确（缓存 / API 两模式）
