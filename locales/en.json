@@ -176,6 +176,7 @@
   "online.dialog.api_id_num": "api_id must be a number",
   "online.dialog.bad_proxy": "Unrecognized proxy format: use host:port or socks5://host:port (optionally user:pass@)",
   "online.dialog.confirm_save": "Save this item to the folder below?\n\n{out}\n\nFile name: {name}",
+  "online.dialog.need_chat": "Please enter a group/channel (@username, a t.me link, an invite link, or a numeric ID)",
   "online.dialog.need_hash_phone": "Please fill in api_hash and phone (with country code, e.g. +8613800000000)",
   "online.dialog.need_kind": "Please select at least one type",
   "online.dialog.no_out_dir": "Please choose an output folder first.",

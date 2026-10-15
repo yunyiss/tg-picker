@@ -292,6 +292,22 @@ def test_online_login_rejects_bad_proxy(tk_root, monkeypatch):
 
 
 @pytest.mark.gui
+def test_online_load_requires_chat(tk_root, monkeypatch):
+    """群/频道为空时应提示——此前会把空串直接提交给加载、用户只看到一条失败日志。"""
+    app = tp.App(tk_root)
+    app.e_chat.delete(0, "end")
+    warns: list[str] = []
+    monkeypatch.setattr(tp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    submitted: list[str] = []
+    app.worker.submit = lambda coro, label=None: (submitted.append(label), coro.close())
+    app._do_load(more=False)
+    assert warns, "空群/频道应弹提示"
+    assert submitted == [], "空群/频道不应提交加载"
+    app._on_close()
+
+
+@pytest.mark.gui
 def test_online_proxy_row_is_compact(tk_root):
     """代理行只留紧凑的代理框 + 小字提示（登录按钮已归到凭据行）。"""
     app = tp.App(tk_root)

@@ -1129,6 +1129,9 @@ class App(LangMixin):
     def _do_load(self, more: bool) -> None:
         """收集筛选条件并提交加载任务；``more=True`` 时从上次游标继续。"""
         chat = self.e_chat.get().strip()
+        if not chat:
+            messagebox.showwarning(_app_title(), t("online.dialog.need_chat"))
+            return
         kinds = set()
         if self.v_photo.get():
             kinds.add("photo")

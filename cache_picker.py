@@ -795,8 +795,9 @@ class CacheApp(LangMixin):
         """
         if self.busy:
             return
-        tdata = Path(self.e_tdata.get().strip())
-        if not tdata.is_dir():
+        raw = self.e_tdata.get().strip()
+        tdata = Path(raw)
+        if not raw or not tdata.is_dir():
             messagebox.showwarning(_app_title(), t("cache.dialog.no_tdata"))
             return
         selected = tuple(ext for ext, var in self.v_formats.items() if var.get())

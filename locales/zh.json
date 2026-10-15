@@ -176,6 +176,7 @@
   "online.dialog.api_id_num": "api_id 必须是数字",
   "online.dialog.bad_proxy": "代理格式无法识别：请用 host:port 或 socks5://host:port（可带 user:pass@）",
   "online.dialog.confirm_save": "是否把这一条保存到下面这个目录？\n\n{out}\n\n文件名：{name}",
+  "online.dialog.need_chat": "请填写群 / 频道（@用户名、t.me 链接、邀请链接或数字 ID）",
   "online.dialog.need_hash_phone": "请填写 api_hash 和手机号（含国家码，如 +8613800000000）",
   "online.dialog.need_kind": "请至少勾选一种类型",
   "online.dialog.no_out_dir": "请先选择保存到的目录",

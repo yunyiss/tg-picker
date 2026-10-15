@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime
 from pathlib import Path
@@ -221,3 +222,32 @@ def test_iter_decrypted_matches_whole_decrypt(tdata_dir: Path):
         assert b"".join(reader.iter_decrypted(entry.cache_path)) == whole, entry.rel
         checked += 1
     assert checked > 0, "没有可校验的缓存文件"
+
+
+def test_process_one_logs_failure_reason(tmp_path: Path):
+    """扫描单条失败时必须把**原因**写进日志（此前是静默 ``except``，界面只给计数）。"""
+
+    class _BoomReader:
+        def read_head_and_size(self, path):
+            raise OSError("模拟读取失败")
+
+    class _Collect(logging.Handler):
+        def __init__(self, sink: list[logging.LogRecord]) -> None:
+            super().__init__()
+            self._sink = sink
+
+        def emit(self, record: logging.LogRecord) -> None:
+            self._sink.append(record)
+
+    records: list[logging.LogRecord] = []
+    sink = _Collect(records)
+    cs._log.addHandler(sink)                      # 直接挂在模块日志器上，不受 propagate 影响
+    try:
+        entry = cs.CacheEntry(cache_path=Path("dummy"), rel="1/0/0s", label="cache",
+                              mtime=0.0, enc_size=1)
+        result = cs._process_one(entry, _BoomReader(), tmp_path, "key", None)
+    finally:
+        cs._log.removeHandler(sink)
+
+    assert result == {"status": "failed"}
+    assert any("读取缓存文件失败" in r.getMessage() for r in records), "失败原因应留痕"

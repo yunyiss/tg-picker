@@ -506,7 +506,8 @@ def _process_one(ent: CacheEntry, reader: CacheReader, thumb_dir: Path,
     """
     try:
         head, plain_size = reader.read_head_and_size(ent.cache_path)
-    except Exception:
+    except Exception as exc:
+        _log.warning("读取缓存文件失败：%s（%s）", ent.cache_path, exc)
         return {"status": "failed"}
     hit = sniff(head)
     if hit is None:
@@ -520,7 +521,8 @@ def _process_one(ent: CacheEntry, reader: CacheReader, thumb_dir: Path,
             data = reader.decrypt(ent.cache_path)
             size = len(data)
             img = make_thumb(data, kind)
-        except Exception:
+        except Exception as exc:
+            _log.warning("解密或生成缩略图失败：%s（%s）", ent.cache_path, exc)
             return {"status": "failed"}
         tp = entry_thumb_path(thumb_dir, key)
         try:

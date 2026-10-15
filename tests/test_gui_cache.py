@@ -242,6 +242,20 @@ def test_scan_requires_at_least_one_format(tk_root, tmp_path, monkeypatch):
 
 
 @pytest.mark.gui
+def test_scan_warns_when_tdata_empty(tk_root, monkeypatch):
+    """tdata 输入为空时应提示路径无效——不能把 ``Path("")`` （即 "."）当成 tdata 扫描。"""
+    app = cp.CacheApp(tk_root)
+    app.e_tdata.delete(0, "end")                  # 清空输入框
+    warns: list[str] = []
+    monkeypatch.setattr(cp.messagebox, "showwarning",
+                        lambda *a, **k: warns.append(str(a[-1])))
+    app.on_load()
+    assert warns, "空路径应弹提示"
+    assert app.busy is False, "空路径不应进入忙碌态"
+    app._on_close()
+
+
+@pytest.mark.gui
 def test_output_formats_default_all_and_gear_clamped(tk_root):
     """输出类型默认全勾（9 种格式）；档位线程数经低配钳制。"""
     app = cp.CacheApp(tk_root)
