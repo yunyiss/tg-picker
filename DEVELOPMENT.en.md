@@ -205,9 +205,10 @@ python -m venv .venv
 
 ## 7. Packaging & release
 
-The release artifact is a **standalone bundle**: built once per platform with the slimmed
-ffmpeg bundled inside, so users just download, unzip and run (no Python, no dependency
-installation). Build scripts live in `packaging/`:
+The release artifact is a **standalone bundle**: built once per platform (currently
+**Windows / Linux**; macOS will be added once it can be verified on real hardware) with
+the slimmed ffmpeg bundled inside, so users just download, unzip and run (no Python, no
+dependency installation). Build scripts live in `packaging/`:
 
 ```cmd
 :: 1) build the decode-only minimal ffmpeg (~5MB; needs gcc + nasm + make)
@@ -219,8 +220,9 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 - On Windows, run step 1 under **Git Bash + MinGW-w64** (`gcc` / `nasm` / `mingw32-make`).
   Note: inside Git Bash, `find` is shadowed by Windows' `find.exe` (`FIND: Parameter format not
   correct`); run `export PATH="/usr/bin:/bin:$PATH"` first (CI uses an msys2 shell and is unaffected).
-- Pushing a tag (`v*`) triggers `.github/workflows/release.yml`, which builds on
-  `ubuntu` / `macos` / `windows`, zips each bundle and attaches them to a GitHub Release.
+- Pushing a tag (`v*`) triggers `.github/workflows/release.yml`, which currently builds on
+  `ubuntu` / `windows`, zips each bundle and attaches them to a GitHub Release (macOS is
+  held back until it can be verified on real hardware).
 - **Binaries are not committed**: the repo holds only the build scripts and the `configure`
   recipe (`packaging/build_ffmpeg.sh`); `dist/` and `build/` are git-ignored.
 

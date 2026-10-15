@@ -1,10 +1,13 @@
 name: Release build
 
-# 打包"独立可执行包"：三平台各自构建一次（PyInstaller 不能交叉编译），
+# 打包"独立可执行包"：各平台各自构建一次（PyInstaller 不能交叉编译），
 # 内置随包分发的裁剪版 ffmpeg（见 packaging/build_ffmpeg.sh）。
 # 触发：打 tag（v*）或手动 workflow_dispatch；产物挂到 GitHub Release。
 #
 # 说明：仓库只存**构建脚本与配方**，二进制不进 git（控仓库体积）。
+#
+# 平台：当前只出 **Windows / Linux**；macOS 待实机验证后再加回 matrix——
+# 与 mac 相关的处理（`--noconsole` 产出 `.app`、zip 步骤按两种名字兼容）都保留着。
 
 on:
   workflow_dispatch:
@@ -50,7 +53,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        # macOS 待实机验证后再加回（mac 上 --noconsole 产出 .app，zip 步骤已兼容该差异）
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
 
@@ -133,7 +137,7 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
-      - name: 创建/更新 Release 并附上三平台产物
+      - name: 创建/更新 Release 并附上各平台产物
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release create "${{ github.ref_name }}" artifacts/*.zip --generate-notes

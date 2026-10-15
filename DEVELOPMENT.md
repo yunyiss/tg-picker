@@ -188,8 +188,8 @@ python -m venv .venv
 
 ## 七、打包与发布
 
-发布形态是**独立可执行包**：三平台各自构建一次，内置随包分发的裁剪版 ffmpeg，
-用户下载解压即用（无需 Python / 无需安装任何依赖）。构建脚本在 `packaging/`：
+发布形态是**独立可执行包**：各平台各自构建一次（当前为 **Windows / Linux**；macOS 待实机
+验证后再加入），内置随包分发的裁剪版 ffmpeg，用户下载解压即用（无需 Python / 无需安装任何依赖）。构建脚本在 `packaging/`：
 
 ```cmd
 :: 1) 构建"只解码"的最小 ffmpeg（约 5MB；需要 gcc + nasm + make）
@@ -201,8 +201,8 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 - Windows 上第 1 步建议在 **Git Bash + MinGW-w64**（`gcc`/`nasm`/`mingw32-make`）下执行。
   注意：Git Bash 里的 `find` 会被 Windows 自带的 `find.exe` 抢占、报 `FIND: Parameter format not correct`；
   先 `export PATH="/usr/bin:/bin:$PATH"` 再跑即可（CI 用 msys2 shell，不受此影响）。
-- 打 tag（`v*`）会触发 `.github/workflows/release.yml`：`ubuntu` / `macos` / `windows`
-  三平台各构建一次，打成 zip 并附到 GitHub Release。
+- 打 tag（`v*`）会触发 `.github/workflows/release.yml`：当前为 `ubuntu` / `windows`
+  两个平台各构建一次，打成 zip 并附到 GitHub Release（macOS 待实机验证后再加回 matrix）。
 - **二进制不进仓库**：仓库只存构建脚本与那份 `configure` 配方（`packaging/build_ffmpeg.sh`）；
   `dist/`、`build/` 均已加入 `.gitignore`。
 

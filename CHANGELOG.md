@@ -1,5 +1,17 @@
 # 变更记录
 
+## 2026-10-16（发布：先只出 Windows / Linux 两个平台的包）
+
+### 发布 · release 的 matrix 去掉 macOS（待实机验证后再加入）
+- **原因**：macOS 还没在实机验证过；而 `release` 作业用 `needs: build` + `fail-fast: false`
+  三平台并行，**任一平台构建失败就整个 Release 都建不出来**——把未验证的平台留在 matrix 里
+  风险太大。当前只出 Windows / Linux。
+- **修改**：`.github/workflows/release.yml` 的 matrix 改为 `[ubuntu-latest, windows-latest]`；
+  与 macOS 相关的处理（`--noconsole` 在 mac 上产出 `.app`、zip 步骤按两种名字兼容）**保留**，
+  后续在 matrix 里加回 `macos-latest` 即可。DEVELOPMENT（中/英）里"三平台"的表述同步为
+  "Windows / Linux（macOS 待实机验证后加入）"。
+- **验证**：纯 CI/文档改动，本地无法执行 Actions；已核对 YAML 语法与 `matrix.os` 展开。
+
 ## 2026-10-16（修复：Linux 下 API 模式网格滚轮失效）
 
 ### 修复 · API 模式补上 X11 的滚轮绑定
