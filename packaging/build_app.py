@@ -54,13 +54,14 @@ def main() -> int:
     specpath = ROOT / "build"
     specpath.mkdir(parents=True, exist_ok=True)
 
+    # 说明：设置了 --specpath 后，相对路径会以 spec 文件所在目录为基准解析，因此下面
+    # 的源路径一律用绝对路径。另：--noconsole 在 Windows 上是不弹控制台；在 macOS 上
+    # 它等价 --windowed，会产出 dist/tg-picker.app（打包成 zip 的步骤按两种名字兼容）。
     cmd = [
         sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
         "--onedir", "--noconsole", "--name", "tg-picker",
         "--distpath", args.dist, "--workpath", str(specpath / "pyi"),
         "--specpath", str(specpath),
-        # 说明：设置了 --specpath 后，相对路径会以 spec 文件所在目录为基准解析，
-        # 因此这里的源路径一律用绝对路径。
         "--add-data", f"{ROOT / 'locales'}{sep}locales",
         "--add-data", f"{ROOT / '_vendor'}{sep}_vendor",
         "--add-data", f"{ff}{sep}.",

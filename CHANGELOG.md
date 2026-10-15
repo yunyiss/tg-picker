@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-10-15（修复：macOS 打包 zip 的产物名兼容）
+
+### 修复 · macOS 发行作业会因产物目录名不同而失败（N2）
+- **现象**：`release.yml` 的 zip 步骤写死 `make_archive(..., 'dist', 'tg-picker')`；而
+  `build_app.py` 固定用 `--noconsole`，它在 macOS 上等价 `--windowed`、会产出
+  `dist/tg-picker.app` 而不是 `dist/tg-picker` → macOS 作业取不到该目录而报错
+  （Windows / Linux 不受影响）。
+- **原因**：onedir 的产物目录名随平台而变，但打包步骤把名字写死了。
+- **修改**：zip 步骤改为**先探测** `dist/tg-picker`、不存在则用 `dist/tg-picker.app`；另加一步
+  `ls -la dist` 便于在 CI 里确认产物形态；`build_app.py` 补注释说明该平台差异。
+- **验证**：纯 CI 改动，本地无法执行 Actions；已逐字段核对 YAML 语法与 `matrix.os` 展开。
+  **macOS 实机仍未验证**（本阶段先保证 Windows；mac 产物留待后续在 CI / 实机确认）。
+
 ## 2026-10-15（修复：超大媒体的提示 + 导出流式化）
 
 ### 修复 · 超上限媒体的跳过原因对用户可见（LOG-1）

@@ -98,8 +98,20 @@ jobs:
           [ "$RUNNER_OS" = "Windows" ] && FF="ffmpeg-bin/ffmpeg.exe"
           python packaging/build_app.py "$FF" --dist dist
 
+      - name: 列出 dist（便于确认产物形态）
+        shell: bash
+        run: ls -la dist
+
       - name: 打成 zip
-        run: python -c "import shutil; shutil.make_archive('tg-picker-${{ matrix.os }}', 'zip', 'dist', 'tg-picker')"
+        shell: bash
+        run: |
+          # onedir 产物目录名随平台而变：Windows / Linux 为 dist/tg-picker；
+          # macOS 上 --noconsole 等价 --windowed，会额外产出 dist/tg-picker.app
+          # ——因此两种名字都试，避免 macOS 作业因找不到 tg-picker 目录而失败。
+          if [ -d dist/tg-picker ]; then BASE=tg-picker; else BASE=tg-picker.app; fi
+          echo ">> archiving $BASE"
+          python -c "import shutil,sys; shutil.make_archive(sys.argv[1], 'zip', 'dist', sys.argv[2])" \
+                 "tg-picker-${{ matrix.os }}" "$BASE"
 
       - uses: actions/upload-artifact@v4
         with:
