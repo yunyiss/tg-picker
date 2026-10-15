@@ -637,26 +637,40 @@ class Worker:
 
     # ----- 下载 -----
     async def _download_one(self, it: MediaItem, out_dir: Path) -> Path:
-        """下载一个媒体原件到 out_dir，返回路径。带 FloodWait 重试。"""
+        """下载一个媒体原件到 out_dir，返回路径。带 FloodWait 重试。
+
+        先写同目录下的临时文件（``<名>.part``），**成功后再原子改名**到最终路径——
+        这样中途失败/取消时，输出目录里不会留下"看着正常、其实是半截"的坏文件。
+        """
         date = it.date if isinstance(it.date, datetime) else datetime.now()
         path = unique_path(out_dir / sanitize(item_name(it), 150))
+        tmp = unique_path(path.with_name(path.name + ".part"))
 
-        for attempt in (1, 2):
-            try:
-                with open(path, "wb") as f:
-                    await self.client.download_media(it.msg, file=f)
+        try:
+            for attempt in (1, 2):
                 try:
-                    ts = date.timestamp()
-                    os.utime(path, (ts, ts))
-                except OSError:
-                    pass
-                return path
-            except errors.FloodWaitError as exc:
-                if attempt == 2:
-                    raise
-                self.post("log", t("online.log.rate_wait", seconds=exc.seconds))
-                await asyncio.sleep(exc.seconds + 1)
-        raise RuntimeError("unreachable")
+                    with open(tmp, "wb") as f:
+                        await self.client.download_media(it.msg, file=f)
+                    try:
+                        ts = date.timestamp()
+                        os.utime(tmp, (ts, ts))
+                    except OSError:
+                        pass
+                    os.replace(tmp, path)      # 原子落位：只有完整文件才出现在最终路径
+                    return path
+                except errors.FloodWaitError as exc:
+                    if attempt == 2:
+                        raise
+                    self.post("log", t("online.log.rate_wait", seconds=exc.seconds))
+                    await asyncio.sleep(exc.seconds + 1)
+            raise RuntimeError("unreachable")
+        finally:
+            # 成功时 tmp 已被 os.replace 移走（删除会因文件不存在而静默失败）；
+            # 失败/取消时清掉半截临时文件。
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
     async def download_items(self, items: list[MediaItem], out_dir: Path) -> None:
         """批量下载原件到 out_dir；逐个报进度，结束投递 download_done。"""

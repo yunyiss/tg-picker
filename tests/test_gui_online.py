@@ -147,6 +147,48 @@ def test_thumb_bytes_bounds_whole_file_fallback():
     assert asyncio.run(collect("photo", 1024))[-1] == {}, "限内的照片仍可整文件兜底"
 
 
+def test_download_one_cleans_partial_on_failure(tmp_path):
+    """回归（N4）：下载中途失败时，输出目录里绝不能残留半截文件（含 .part）。"""
+
+    class _BoomClient:
+        async def download_media(self, msg, file=None, **kw):
+            file.write(b"partial-bytes")           # 先落一点，再失败
+            raise RuntimeError("network dropped")
+
+    it = tp.MediaItem(msg_id=1, date=datetime.datetime(2026, 10, 10), kind="photo",
+                      size=1, file_name="pic.jpg", mime="image/jpeg", msg=_FakeMsg())
+    worker = tp.Worker.__new__(tp.Worker)           # 不起线程：只调 _download_one
+    worker.client = _BoomClient()
+    worker.post = lambda *a, **k: None
+
+    with pytest.raises(RuntimeError):
+        asyncio.run(worker._download_one(it, tmp_path))
+
+    assert list(tmp_path.iterdir()) == [], "失败后输出目录应保持干净"
+
+
+def test_download_one_renames_only_on_success(tmp_path):
+    """成功路径：先写 .part，再原子改名；返回最终路径且无 .part 残留。"""
+
+    class _OkClient:
+        async def download_media(self, msg, file=None, **kw):
+            file.write(b"hello-bytes")
+            return None
+
+    it = tp.MediaItem(msg_id=1, date=datetime.datetime(2026, 10, 10), kind="photo",
+                      size=1, file_name="pic.jpg", mime="image/jpeg", msg=_FakeMsg())
+    worker = tp.Worker.__new__(tp.Worker)
+    worker.client = _OkClient()
+    worker.post = lambda *a, **k: None
+
+    path = asyncio.run(worker._download_one(it, tmp_path))
+
+    assert path.parent == tmp_path
+    assert path.suffix == ".jpg"
+    assert path.read_bytes() == b"hello-bytes"
+    assert sorted(p.name for p in tmp_path.iterdir()) == [path.name], "不应残留 .part"
+
+
 @pytest.mark.gui
 def test_online_double_click_confirms_before_download(tk_root, monkeypatch):
     """回归：双击缩略图必须**先弹确认**；取消则不下单，确认才提交下载。"""
