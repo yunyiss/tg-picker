@@ -207,14 +207,14 @@ never scrolled past in the client).
 | `tg_picker.py` | **API mode** GUI (method ②, Telethon) |
 | `i18n.py` | Internationalization core: loads language resources, `t(key)` lookups, switches language and notifies the UI to refresh |
 | `ui_kit.py` | GUI-independent helpers (`human_size` / `unique_path` / config I/O / hardware detection, concurrency tier recommendation and low-spec clamping) and shared constants |
-| `ui_lang.py` | Language-switching UI mechanism (`LangMixin`), shared by all three screens |
-| `ui_style.py` | Shared ttk style builders for the three screens (clam theme and segmented buttons; colors are per-screen) |
+| `ui_lang.py` | Language-switching UI mechanism (`LangMixin`) plus the UI-skeleton methods the two modes share verbatim; used by all three screens |
+| `ui_style.py` | Shared palette + ttk style builders: `register_common()` (containers / text scale / buttons / inputs / checkboxes), `register_progressbar()`, segmented buttons; differences (scrollbar colours) are per-screen |
 | `app_paths.py` | "Data directory" resolution: portable (a `data/` folder next to the program) / user directory, cross-platform; locates all runtime artifacts |
 | `firstrun.py` | First-run dialog to choose where data is stored (portable / user directory) |
 | `locales/zh.json`, `locales/en.json` | Language resource files (Chinese / English, identical key sets) |
 | `_vendor/tg_scoop/` | Decryption core (verbatim copy of upstream tg-scoop, MIT, LICENSE included) |
 | `run.cmd` | Launcher script (calls `launcher.py`) |
-| `requirements.txt` / `requirements-dev.txt` | Runtime / development dependencies (pytest, ruff) |
+| `requirements.txt` / `requirements-dev.txt` | Runtime / development dependencies (pytest, ruff, mypy, PyInstaller) |
 | `pyproject.toml` | Project metadata plus ruff and pytest configuration (dependencies live only in the .txt files) |
 | `tests/` | pytest test suite (see section 8) |
 | `LICENSE` | MIT license + third-party attribution + disclaimer |
@@ -404,7 +404,11 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pytest -m "not gui"      :: skip the display-dependent GUI tests
 .venv\Scripts\python.exe -m pytest -m gui            :: GUI tests only
 .venv\Scripts\python.exe -m ruff check .             :: static checks
+.venv\Scripts\python.exe -m mypy                     :: type checks (6 pure-logic modules)
 ```
+
+> For debugging you can also run **`python launcher.py`** directly: launching from a terminal keeps
+> console output; only `run.cmd` (which uses `pythonw`) redirects stdout/stderr to `logs/tg_picker.log`.
 
 | Test file | Coverage | Requirements |
 |---|---|---|
@@ -415,6 +419,10 @@ python -m venv .venv
 | `tests/test_gui_online.py` | API mode GUI: window build, queue branches, cell selection, language switch, code prompt round-trip | display (no network) |
 | `tests/test_gui_cache.py` | local cache mode GUI: virtualized rendering, scroll performance, selection actions, language switch, open folder (including fallback) | real tdata + display |
 | `tests/test_gui_launcher.py` | unified launcher: mode-selection build, language switch, entering the chosen mode | display (no network) |
+| `tests/test_gui_consistency.py` | two-mode UI structure parity: action-bar layout, progress/status positions, section titles, empty state; shared card geometry / palette / styles; shift-click range and video badge | display |
+| `tests/test_app_paths.py` | data-directory resolution (portable / user dir / env override), marker persistence, portable fallback when unwritable, both modes share one default export dir | none |
+| `tests/test_firstrun.py` | first-run data-location choice (dialog and persistence; no prompt when a choice already exists) | display |
+| `tests/test_packaging.py` | packaging-script self-check: LICENSE / third-party notices are bundled and cover the bundled FFmpeg LGPL | none |
 
 - When no tdata is found those tests are **skipped** (not failed); point at one with the
   `TDATA_PATH` environment variable, e.g. `set TDATA_PATH=D:\Telegram\tdata`.
@@ -437,6 +445,8 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 ```
 
 - On Windows, run step 1 under **Git Bash + MinGW-w64** (`gcc` / `nasm` / `mingw32-make`).
+  Note: inside Git Bash, `find` is shadowed by Windows' `find.exe` (`FIND: Parameter format not
+  correct`); run `export PATH="/usr/bin:/bin:$PATH"` first (CI uses an msys2 shell and is unaffected).
 - Pushing a tag (`v*`) triggers `.github/workflows/release.yml`, which builds on
   `ubuntu` / `macos` / `windows`, zips each bundle and attaches them to a GitHub Release.
 - **Binaries are not committed**: the repo holds only the build scripts and the `configure`
@@ -444,8 +454,11 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 
 ### Code style
 
-- `ruff` runs only deterministic checks (`E/F/I/UP/B`) and performs **no** reformatting;
-  `_vendor/` is excluded.
+- `ruff` runs only deterministic checks (`E/F/I/UP/B`, plus McCabe complexity `C90 <= 15` and
+  naming `N`) and performs **no** reformatting; `_vendor/` is excluded.
+- `mypy` covers only the **pure-logic** modules (`cache_source` and the shared leaf modules
+  `ui_kit` / `ui_lang` / `ui_style` / `i18n` / `app_paths`); the two large GUI files are not
+  included yet.
 - Line endings are enforced by `.gitattributes`: source and config are LF, `.cmd`/`.bat`
   are CRLF. If you cloned the repository before these rules existed, normalise once:
 

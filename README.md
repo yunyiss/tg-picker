@@ -114,7 +114,7 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 - **保存前不写出任何文件**；保存只写入你指定的输出目录
 - 界面里**没有"移动"选项**，避免误动缓存
 - 解密内核为 [tg-scoop](https://github.com/GarrettFynn/tg-scoop)（MIT）的
-  内置副本，已从本机缓存成功解出 3019 个媒体、失败 0 个
+  内置副本，已从本机缓存成功解出数千个媒体、失败 0 个
 
 ### 提示
 
@@ -169,14 +169,14 @@ AES-256-IGE 解本地密钥块、`TDEF` 容器解析与 AES-256-CTR 解密。
 | `tg_picker.py` | **API 模式** GUI（方法②，Telethon） |
 | `i18n.py` | 国际化内核：载入语言资源、`t(key)` 取词、切换语言并通知界面刷新 |
 | `ui_kit.py` | 与界面无关的通用工具（`human_size` / `unique_path` / 配置读写 / 硬件检测、并发档位推荐与低配钳制）与共享常量 |
-| `ui_lang.py` | 语言切换的界面机制（`LangMixin`），三个界面共用 |
-| `ui_style.py` | 三个界面共用的 ttk 样式构造（clam 主题与分段按钮；颜色由各界面自定） |
+| `ui_lang.py` | 语言切换的界面机制（`LangMixin`）＋两模式逐字相同的界面骨架方法，三个界面共用 |
+| `ui_style.py` | 共用色板 + ttk 样式构造：`register_common()`（容器/文字色阶/按钮/输入/复选）、`register_progressbar()`、分段按钮；差异项（滚动条配色）由各界面自定 |
 | `app_paths.py` | 「数据目录」解析：便携（程序旁 `data/`）/ 用户目录，跨平台；供所有运行时产物定位 |
 | `firstrun.py` | 首次启动的数据存放位置选择对话框（便携 / 用户目录） |
 | `locales/zh.json`、`locales/en.json` | 语言资源文件（中文 / 英文，键集合一致） |
 | `_vendor/tg_scoop/` | 解密内核（上游 tg-scoop 原样副本，MIT，含 LICENSE） |
 | `run.cmd` | 启动脚本（调用 `launcher.py`） |
-| `requirements.txt` / `requirements-dev.txt` | 运行依赖 / 开发测试依赖（pytest、ruff） |
+| `requirements.txt` / `requirements-dev.txt` | 运行依赖 / 开发测试依赖（pytest、ruff、mypy、PyInstaller） |
 | `pyproject.toml` | 项目元数据与 ruff、pytest 配置（依赖只在上面的 txt 里声明） |
 | `tests/` | pytest 测试套件（详见「八、开发与测试」） |
 | `LICENSE` | MIT 许可 + 第三方代码标注 + 免责声明 |
@@ -348,7 +348,11 @@ python -m venv .venv
 .venv\Scripts\python.exe -m pytest -m "not gui"      :: 跳过需要显示器的 GUI 用例
 .venv\Scripts\python.exe -m pytest -m gui            :: 只跑 GUI 用例
 .venv\Scripts\python.exe -m ruff check .             :: 静态检查
+.venv\Scripts\python.exe -m mypy                     :: 类型检查（6 个纯逻辑模块）
 ```
+
+> 调试时也可直接 **`python launcher.py`**：从终端启动会保留控制台输出；只有用 `run.cmd`（`pythonw`）
+> 启动时才会把 stdout/stderr 接管到 `logs/tg_picker.log`。
 
 | 测试文件 | 覆盖面 | 依赖 |
 |---|---|---|
@@ -359,6 +363,10 @@ python -m venv .venv
 | `tests/test_gui_online.py` | API 模式 GUI：建窗、队列分支、单元格选中、语言切换、验证码回填 | 需显示器（不联网） |
 | `tests/test_gui_cache.py` | 本地缓存模式 GUI：虚拟化渲染、滚动性能、选择操作、语言切换、打开目录（含失败回退） | 需真实 tdata + 显示器 |
 | `tests/test_gui_launcher.py` | 统一入口：模式选择界面构建、语言切换、选后进入对应模式 | 需显示器（不联网） |
+| `tests/test_gui_consistency.py` | 两模式 UI 结构一致性：操作条版式、进度/状态位置、分区标题、空状态；卡片几何/色板/样式同源；Shift 连选与视频角标 | 需显示器 |
+| `tests/test_app_paths.py` | 数据目录解析（便携/用户目录/环境变量覆盖）、marker 落盘、便携不可写回退、两模式默认导出目录一致 | 无 |
+| `tests/test_firstrun.py` | 首次启动的数据位置选择（对话框与落盘、已有选择不再询问） | 需显示器 |
+| `tests/test_packaging.py` | 打包脚本结构自检：随包携带 LICENSE / 第三方声明，且声明覆盖内置 ffmpeg 的 LGPL | 无 |
 
 - 找不到 tdata 时相关用例会**跳过**（`skip`，不算失败）；可用环境变量
   `TDATA_PATH` 指定：`set TDATA_PATH=D:\Telegram\tdata`。
@@ -379,6 +387,8 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 ```
 
 - Windows 上第 1 步建议在 **Git Bash + MinGW-w64**（`gcc`/`nasm`/`mingw32-make`）下执行。
+  注意：Git Bash 里的 `find` 会被 Windows 自带的 `find.exe` 抢占、报 `FIND: Parameter format not correct`；
+  先 `export PATH="/usr/bin:/bin:$PATH"` 再跑即可（CI 用 msys2 shell，不受此影响）。
 - 打 tag（`v*`）会触发 `.github/workflows/release.yml`：`ubuntu` / `macos` / `windows`
   三平台各构建一次，打成 zip 并附到 GitHub Release。
 - **二进制不进仓库**：仓库只存构建脚本与那份 `configure` 配方（`packaging/build_ffmpeg.sh`）；
@@ -386,7 +396,8 @@ python packaging/build_app.py ffmpeg-bin/ffmpeg.exe --dist dist
 
 ### 代码风格
 
-- `ruff` 只启用确定性检查（`E/F/I/UP/B`），**不做**格式化重排；`_vendor/` 不参与检查。
+- `ruff` 只启用确定性检查（`E/F/I/UP/B`，外加圈复杂度 `C90≤15` 与命名 `N`），**不做**格式化重排；`_vendor/` 不参与检查。
+- `mypy` 只覆盖**纯逻辑**模块（`cache_source` 与共享叶子模块 `ui_kit` / `ui_lang` / `ui_style` / `i18n` / `app_paths`）；两个 GUI 大文件暂不纳入。
 - 换行符由 `.gitattributes` 约束：源码与配置 LF、`.cmd`/`.bat` 为 CRLF。
   若在引入这些约定之前克隆过仓库，执行一次归一即可：
 

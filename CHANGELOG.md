@@ -1,5 +1,19 @@
 # 变更记录
 
+## 2026-10-15（文档：补齐开发/构建说明并修正过时描述）
+
+### 文档 · README 中英同步补齐（P3-2）
+- **补齐**：本地命令加 `mypy`；「代码风格」补齐 ruff 规则集（`E/F/I/UP/B` + 圈复杂度 `C90≤15`
+  + 命名 `N`）并说明 mypy 的覆盖范围；新增「可直接 `python launcher.py` 运行（保留控制台输出）」
+  说明；`build_ffmpeg.sh` 补上 Git Bash 里 `find` 被 Windows `find.exe` 抢占的 `PATH` 坑。
+- **修正**：`ui_style.py` 的描述（颜色/样式已下沉到 `ui_style.register_common`，不再是"各界面自定"）；
+  「测试文件」表补齐此前漏列的 4 个（`test_gui_consistency` / `test_app_paths` / `test_firstrun`
+  / `test_packaging`）；`requirements-dev` 说明补 `mypy` / `PyInstaller`；中文版把过时的
+  "已解出 3019 个媒体"改为"数千个"（避免随缓存增长而过时）。
+- **未做（按既定口径）**：macOS 首次打开方式（右键打开 / `xattr -cr`）**暂不写入**，待 mac 实机
+  验证后再补。
+- **验证**：纯文档改动，中英两版逐条对齐；`ruff` / `mypy` / `pytest` 全绿（**106 passed**）。
+
 ## 2026-10-15（修复：macOS 打包 zip 的产物名兼容）
 
 ### 修复 · macOS 发行作业会因产物目录名不同而失败（N2）
