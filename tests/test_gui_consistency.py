@@ -157,6 +157,14 @@ def test_card_geometry_is_shared():
 
 
 @pytest.mark.gui
+def test_progressbar_style_is_shared(two_apps):
+    """UI-2：两模式进度条引用**同一个**样式名（配色定义也同源，避免一处改一处漏）。"""
+    cache_app, online_app = two_apps
+    assert cache_app.pb.cget("style") == online_app.pb.cget("style") == \
+        ui_style.PROGRESS_STYLE
+
+
+@pytest.mark.gui
 def test_selected_count_label_matches(two_apps):
     """「已选 N 个」计数：两模式同款样式、同位置，且选中后同步更新。"""
     cache_app, online_app = two_apps

@@ -72,3 +72,21 @@ def segmented_buttons(
                  borderwidth=0, relief="flat",
                  bordercolor=accent, lightcolor=accent, darkcolor=accent)
     st.map("SegOn.TButton", background=[("active", accent_hover)])
+
+
+# ---------------------------------------------------------------------------
+# 进度条（两个模式**共用一份定义**，避免样式名 / 配色漂移——UI-2）
+#
+# clam 主题的进度条也由自绘图片构成，只设 ``background`` 会在两端留下浅色 chrome；
+# 因此连 ``bordercolor`` / ``lightcolor`` / ``darkcolor`` 一起覆盖，并给禁用态一档暗色。
+# ---------------------------------------------------------------------------
+PROGRESS_STYLE = "Slim.Horizontal.TProgressbar"
+
+
+def register_progressbar(st: ttk.Style) -> str:
+    """注册共用的细轨进度条样式，返回样式名（两个模式都引用**这一个**名字）。"""
+    st.configure(PROGRESS_STYLE, background=ACCENT, troughcolor="#14141a",
+                 borderwidth=0, thickness=6,
+                 bordercolor="#14141a", lightcolor=ACCENT, darkcolor=ACCENT)
+    st.map(PROGRESS_STYLE, background=[("disabled", "#2b2b33")])
+    return PROGRESS_STYLE

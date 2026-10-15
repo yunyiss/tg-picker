@@ -429,11 +429,8 @@ class CacheApp(LangMixin):
 
     @staticmethod
     def _style_progressbars(st: ttk.Style) -> None:
-        """进度条：细轨，轨道比背景更暗以便区分。"""
-        st.configure("Slim.Horizontal.TProgressbar", background=ACCENT,
-                     troughcolor="#14141a", borderwidth=0, thickness=6,
-                     bordercolor="#14141a", lightcolor=ACCENT, darkcolor=ACCENT)
-        st.map("Slim.Horizontal.TProgressbar", background=[("disabled", "#2b2b33")])
+        """进度条：改用 ``ui_style`` 的共用定义（两模式同一样式名 / 配色，见 UI-2）。"""
+        ui_style.register_progressbar(st)
 
     @staticmethod
     def _style_scrollbars(st: ttk.Style) -> None:
@@ -795,7 +792,7 @@ class CacheApp(LangMixin):
         self.l_status.pack(side="right")
         # 进度条只在任务进行时出现，常态不占位（避免"像个空输入框"）
         self.pb = ttk.Progressbar(wrap, mode="determinate", maximum=100,
-                                  style="Slim.Horizontal.TProgressbar")
+                                  style=ui_style.PROGRESS_STYLE)
         self._pb_visible = False
 
     def _show_progress(self, value: float | None = None) -> None:

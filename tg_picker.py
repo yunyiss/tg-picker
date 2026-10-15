@@ -862,9 +862,8 @@ class App(LangMixin):
                indicatorforeground=[("selected", "#ffffff")],
                upperbordercolor=[("selected", ACCENT), ("!selected", BORDER)],
                lowerbordercolor=[("selected", ACCENT), ("!selected", BORDER)])
-        # 进度条 / 滚动条：细轨 + 深槽
-        st.configure("Horizontal.TProgressbar", background=ACCENT,
-                     troughcolor="#14141a", borderwidth=0, thickness=6)
+        # 进度条：与缓存模式共用同一个样式名 / 配色（UI-2）；滚动条：细轨 + 深槽
+        ui_style.register_progressbar(st)
         st.configure("Vertical.TScrollbar", background=BTN, troughcolor=BG,
                      bordercolor=BG, arrowcolor=SUB, borderwidth=0,
                      lightcolor=BTN, darkcolor=BTN)
@@ -1108,7 +1107,8 @@ class App(LangMixin):
         f2.pack(fill="x")
         self.l_status = ttk.Label(f2, text=t("common.ready"), style="BarStatus.TLabel")
         self.l_status.pack(side="right")
-        self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100)
+        self.pb = ttk.Progressbar(f2, mode="determinate", maximum=100,
+                                  style=ui_style.PROGRESS_STYLE)
         self.pb.pack(side="left", fill="x", expand=True, padx=(0, 10))
 
     def _build_log(self) -> None:

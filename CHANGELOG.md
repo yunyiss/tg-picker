@@ -1,5 +1,18 @@
 # 变更记录
 
+## 2026-10-15（修复：统一两模式进度条样式）
+
+### 修复 · 进度条样式名与配色不一致（UI-2）
+- **现象**：缓存模式的进度条是 `Slim.Horizontal.TProgressbar` 且显式覆盖了三色；
+  API 模式用的是默认 `Horizontal.TProgressbar`、只设了 `background` / `troughcolor`
+  ——clam 主题下两端会露出浅色 chrome，两模式观感不一致。
+- **原因**：进度条样式由两个界面各自注册，样式名与覆盖项不同源。
+- **修改**：把进度条样式收敛到 `ui_style`（`PROGRESS_STYLE` + `register_progressbar()`），
+  两个模式注册并引用**同一个**样式名与配色（含 `bordercolor` / `lightcolor` / `darkcolor`
+  与 disabled 档）；缓存侧取值不变、零视觉变化。
+- **验证**：`ruff` / `mypy` 全绿、`pytest` **100 passed**（新增断言：两模式
+  `pb.cget("style")` 相同且等于 `ui_style.PROGRESS_STYLE`）。
+
 ## 2026-10-15（修复：API 模式补齐视频角标与占位图）
 
 ### 修复 · API 视频单元格与缓存模式观感不一致（UI-1）
