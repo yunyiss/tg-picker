@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-10-15（打包：排除未使用的 PIL AVIF 插件，零损失瘦身）
+
+### 打包 · 排除 PIL 的 AVIF 插件（发布包 −7.5MB）
+- **现象**：Windows 发行包里的 `PIL/_avif.cp313-win_amd64.pyd` 达 **7.47 MB**，是全包（除内置
+  ffmpeg 外）最大单项；而本工具实际处理与嗅探的图片格式只有 jpg / png / gif / webp / bmp，
+  **全仓无 avif / heif / AvifImagePlugin 任何引用**——这 7.47 MB 纯属白占体积。
+- **原因**：Pillow 默认随包携带 AVIF 编解码扩展，PyInstaller 会把它一并打进 onedir 产物；
+  此前未对图片格式做任何裁剪。
+- **修改**：`packaging/build_app.py` 的 EXCLUDE 加入 `PIL.AvifImagePlugin` 与 `PIL._avif`
+  （后者是该插件的 C 扩展，一并排除以免误留二进制）。
+- **验证**：`ruff` / `mypy` 全绿、`pytest` **96 passed**；用内置裁剪版 ffmpeg 重新打包实测：
+  未压缩 **42.3 MB / 1020 文件**（排除前 49.8 MB）、zip **20.9 MB**（排除前 25.0 MB）；
+  `_avif.pyd` 消失而 `_webp.pyd` 保留；体积前五为 tg-picker.exe 6.36 / python313.dll 5.83 /
+  libcrypto-3.dll 4.99 / ffmpeg.exe 4.70 / _imaging 2.38（MB）。
+
 ## 2026-10-15（修复：API 缩略图卡片尺寸与缓存模式对齐）
 
 ### 修复 · API 模式缩略图卡片尺寸/间距与缓存模式不一致

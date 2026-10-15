@@ -31,6 +31,10 @@ EXCLUDE = [
     "mypy", "mypyc", "ast_serialize", "librt", "pathspec",
     "ruff", "pip", "setuptools", "wheel",
     "PyInstaller", "pefile", "altgraph", "pywin32ctypes",
+    # 图片格式裁剪：本工具只处理 jpg/png/gif/webp/bmp，**不含 AVIF**（全仓无
+    # avif/heif/AvifImagePlugin 引用）。排除后省约 7.5MB（实测 _avif.pyd 7.47MB），
+    # 零功能损失。PIL._avif 是该插件的 C 扩展，一并排除以免误留二进制。
+    "PIL.AvifImagePlugin", "PIL._avif",
 ]
 
 
