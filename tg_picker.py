@@ -50,10 +50,18 @@ from ui_kit import (
     FONT,
     GAP,
     IMG_BOX,
+    TAG_BG,
+    TAG_FG,
+    TAG_FONT_SIZE,
+    TAG_H,
+    TAG_INSET,
+    TAG_RADIUS,
+    TAG_W,
     THUMB,
     human_size,
     rounded_pts,
     unique_path,
+    video_placeholder,
 )
 from ui_lang import LangMixin
 from ui_style import (
@@ -210,6 +218,8 @@ class MediaItem:
     card: object = None           # 卡片底：圆角多边形图元
     img: object = None            # 缩略图图元
     img_txt: object = None        # 占位文字（载入中 / 无预览）
+    tag: object = None            # 视频角标：黑底圆角块
+    tag_txt: object = None        # 视频角标文字（「视频」）
     info: object = None           # 底部信息文字（日期 · 大小）
     badge_ring: object = None     # 选中徽标：外圈（内容区底色）
     badge: object = None          # 选中徽标：强调色圆底
@@ -740,6 +750,7 @@ class App(LangMixin):
         self._resize_job = None
         self._pump_job = None
         self.who = ""                 # 已登录显示名（供语言切换时重建标签）
+        self.video_ph: ImageTk.PhotoImage | None = None   # 视频占位图（缓存一次复用）
         self._prompt_spec = None      # 待填写的提示（语言键+参数），切换语言时重渲染
         self.last_click: int | None = None   # 上次单击的条目下标（供 Shift 连选）
 
@@ -881,8 +892,12 @@ class App(LangMixin):
         self.update_count()                       # 「已选 N 个」+「保存选中（n）」
         self.l_login.configure(text=self._login_text())
         self._render_prompt()                      # 待填写的验证码/密码提示
-        for it in self.items:                      # 单元格里"无预览"占位
-            if it.thumb_failed and it.cell is not None:
+        for it in self.items:                      # 单元格的「视频」角标 / "无预览"占位
+            if it.cell is None:
+                continue
+            if it.kind == "video":
+                it.cell.itemconfigure(it.tag_txt, text=t("cell.video_tag"))
+            elif it.thumb_failed:
                 it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"))
 
     def _divider(self) -> None:
@@ -1260,6 +1275,12 @@ class App(LangMixin):
         it.img_txt = cell.create_text(img_cx, img_cy, anchor="center",
                                       text=t("cell.loading"), fill=SUB,
                                       font=(FONT, 9))
+        # 视频角标：贴在图右下角（黑底 + 「视频」），与缓存模式同一几何/配色
+        it.tag = cell.create_polygon(0, 0, 0, 0, fill=TAG_BG, outline="",
+                                     state="hidden", smooth=False)
+        it.tag_txt = cell.create_text(0, 0, anchor="center",
+                                      text=t("cell.video_tag"), fill=TAG_FG,
+                                      font=(FONT, TAG_FONT_SIZE), state="hidden")
         # 信息行：与缓存模式同格式、同字号、同位置（贴卡片底部，按实测宽度水平居中）
         it.info = cell.create_text(
             0, 0, anchor="nw", fill=SUB, font=(FONT, 9),
@@ -1278,12 +1299,50 @@ class App(LangMixin):
                                         fill="#ffffff", font=(FONT, 11, "bold"),
                                         state="hidden")
         it.cell = cell
+        if it.kind == "video":
+            self._show_video_placeholder(it)   # 视频创建即给灰色占位图 + 「视频」角标
         cell.bind("<Button-1>", lambda e, i=it: self.on_cell_click(e, i))
         cell.bind("<Double-Button-1>", lambda e, i=it: self.preview_item(i))
         cell.bind("<Enter>", lambda e, i=it: self.hover_item(i, True))
         cell.bind("<Leave>", lambda e, i=it: self.hover_item(i, False))
         # 滚轮落在卡片上时也能滚动（画布仅在指针进入空白区时才 bind_all）
         cell.bind("<MouseWheel>", self._on_wheel)
+
+    def _video_placeholder(self) -> ImageTk.PhotoImage | None:
+        """视频的灰色占位图（封面/首帧取不到或尚在加载时使用），只生成一次并复用。"""
+        if self.video_ph is None:
+            try:
+                self.video_ph = ImageTk.PhotoImage(video_placeholder())
+            except Exception:
+                return None
+        return self.video_ph
+
+    def _place_video_tag(self, it: MediaItem, img_w: int, img_h: int) -> None:
+        """把「视频」角标贴到**实际图像**的右下角（与缓存模式同一几何）。
+
+        图片在卡片内居中（信息行另占底部），故按实际图宽高算角标位置，而不是贴在
+        图片方框的角上——否则 letterbox 缩略图会让角标悬空在卡片底色上。
+        """
+        img_cx, img_cy = CARD_W // 2, 8 + IMG_BOX // 2
+        left = img_cx - img_w // 2
+        top = img_cy - img_h // 2
+        tx = left + img_w - TAG_W - TAG_INSET
+        ty = top + img_h - TAG_H - TAG_INSET
+        it.cell.coords(it.tag, *rounded_pts(tx, ty, tx + TAG_W, ty + TAG_H, TAG_RADIUS))
+        it.cell.itemconfigure(it.tag, state="normal")
+        it.cell.coords(it.tag_txt, tx + TAG_W // 2, ty + TAG_H // 2)
+        it.cell.itemconfigure(it.tag_txt, state="normal")
+
+    def _show_video_placeholder(self, it: MediaItem) -> None:
+        """视频格子显示为灰色占位图 + 「视频」角标（与缓存模式一致，而非「无预览」）。"""
+        if it.cell is None:
+            return
+        ph = self._video_placeholder()
+        if ph is None:
+            return
+        it.cell.itemconfigure(it.img, image=ph, state="normal")
+        it.cell.itemconfigure(it.img_txt, state="hidden")
+        self._place_video_tag(it, ph.width(), ph.height())
 
     def _paint_cell(self, it: MediaItem, fill: str, outline: str, *,
                     badge: bool = False) -> None:
@@ -1505,14 +1564,20 @@ class App(LangMixin):
         if it is not None and it.cell is not None:
             if img is None:
                 it.thumb_failed = True
-                it.cell.itemconfigure(it.img, image="", state="hidden")
-                it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"),
-                                      state="normal")
+                if it.kind == "video":
+                    # 视频取不到封面：回退灰色占位图 + 「视频」角标（与缓存模式一致）
+                    self._show_video_placeholder(it)
+                else:
+                    it.cell.itemconfigure(it.img, image="", state="hidden")
+                    it.cell.itemconfigure(it.img_txt, text=t("cell.no_preview"),
+                                          state="normal")
             else:
                 it.thumb = img
                 it.photo = ImageTk.PhotoImage(img)
                 it.cell.itemconfigure(it.img, image=it.photo, state="normal")
                 it.cell.itemconfigure(it.img_txt, state="hidden")
+                if it.kind == "video":
+                    self._place_video_tag(it, it.photo.width(), it.photo.height())
         if self._thumb_total:
             self.set_status("online.status.thumbs",
                             done=self._thumb_done, total=self._thumb_total)

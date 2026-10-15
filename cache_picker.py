@@ -46,12 +46,19 @@ from ui_kit import (
     FONT,
     GAP,
     IMG_BOX,
-    THUMB,
+    TAG_BG,
+    TAG_FG,
+    TAG_FONT_SIZE,
+    TAG_H,
+    TAG_INSET,
+    TAG_RADIUS,
+    TAG_W,
     detect_hardware,
     gear_workers,
     human_size,
     recommended_workers,
     rounded_pts,
+    video_placeholder,
 )
 from ui_lang import LangMixin
 from ui_style import (
@@ -1163,10 +1170,10 @@ class CacheApp(LangMixin):
         cell["img"] = self.canvas.create_image(0, 0, anchor="nw")
         # 视频角标：贴在图右下角（黑底 + "视频"），四角用真实圆弧
         cell["tag"] = self.canvas.create_polygon(
-            0, 0, 0, 0, fill="#0d0d10", outline="", state="hidden", smooth=False)
+            0, 0, 0, 0, fill=TAG_BG, outline="", state="hidden", smooth=False)
         cell["tag_txt"] = self.canvas.create_text(
-            0, 0, anchor="center", text=t("cell.video_tag"), fill="#e8e8ec",
-            font=(FONT, 8), state="hidden")
+            0, 0, anchor="center", text=t("cell.video_tag"), fill=TAG_FG,
+            font=(FONT, TAG_FONT_SIZE), state="hidden")
         # 选中徽标：内容区底色描边圈 + 强调色圆底 + 对勾。
         # 外圈是必要的——缩略图可能是亮色/同色系，纯强调色圆底在图上会糊掉。
         cell["badge_ring"] = self.canvas.create_oval(
@@ -1315,18 +1322,17 @@ class CacheApp(LangMixin):
             # 视频角标：贴在**实际图像**的右下角（而非容器底边，
             # 否则 letterbox 缩略图会让角标悬空在卡片底色上）
             if it.kind == "video" and photo is not None:
-                tag_w, tag_h = 34, 18
                 anchor_x = box_x + (IMG_BOX - img_w) // 2
                 anchor_y = box_y + (IMG_BOX - img_h) // 2
-                tx = anchor_x + img_w - tag_w - 3
-                ty = anchor_y + img_h - tag_h - 3
+                tx = anchor_x + img_w - TAG_W - TAG_INSET
+                ty = anchor_y + img_h - TAG_H - TAG_INSET
                 self._canvas_cfg(cell, "tag", state="normal")
                 self._canvas_coords(cell, "tag",
-                                    *rounded_pts(tx, ty, tx + tag_w,
-                                                 ty + tag_h, 4))
+                                    *rounded_pts(tx, ty, tx + TAG_W,
+                                                 ty + TAG_H, TAG_RADIUS))
                 self._canvas_cfg(cell, "tag_txt", state="normal")
                 self._canvas_coords(cell, "tag_txt",
-                                    tx + tag_w // 2, ty + tag_h // 2)
+                                    tx + TAG_W // 2, ty + TAG_H // 2)
             else:
                 self._canvas_cfg(cell, "tag", state="hidden")
                 self._canvas_cfg(cell, "tag_txt", state="hidden")
@@ -1390,13 +1396,7 @@ class CacheApp(LangMixin):
 
     def _make_video_placeholder(self) -> ImageTk.PhotoImage | None:
         try:
-            im = Image.new("RGB", (THUMB, THUMB), (58, 58, 58))
-            from PIL import ImageDraw
-            d = ImageDraw.Draw(im)
-            cx, cy = THUMB // 2, THUMB // 2
-            d.rectangle([cx - 30, cy - 22, cx + 30, cy + 22], outline=(150, 150, 150), width=2)
-            d.polygon([(cx - 11, cy - 12), (cx - 11, cy + 12), (cx + 13, cy)], fill=(190, 190, 190))
-            return ImageTk.PhotoImage(im)
+            return ImageTk.PhotoImage(video_placeholder())
         except Exception:
             return None
 

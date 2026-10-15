@@ -1,7 +1,7 @@
 """与界面无关的通用工具与共享常量。
 
-放在独立的**叶子模块**里（只依赖 ``i18n``，不依赖任何 GUI，也不依赖 tdata
-解密模块），这样两个入口都能安全复用：
+放在独立的**叶子模块**里（只依赖 ``i18n``；视频占位图另用 Pillow 生成，均非 GUI 依赖，
+也不依赖 tdata 解密模块），这样两个入口都能安全复用：
 
 - ``cache_source`` / ``cache_picker`` 需要文件与数值格式化；
 - ``tg_picker`` 刻意不与 ``cache_source`` 耦合（否则会被拖入 tdata 解密与
@@ -20,6 +20,8 @@ import sys
 from dataclasses import dataclass
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
+
+from PIL import Image, ImageDraw
 
 from i18n import t
 
@@ -46,6 +48,20 @@ GAP = 10                       # 相邻卡片之间的间隙
 IMG_BOX = 144                  # 卡片内图片方框边长（缩略图在其中居中）
 THUMB = 140                    # 缩略图边长上限（生成的缩略图不超过它）
 CORNER = 9                     # 卡片圆角半径
+
+# ---------------------------------------------------------------------------
+# 视频卡片标记：角标几何/配色 + 灰色占位图（缓存模式与 API 模式**同源**）
+#
+# 两个模式的视频卡片必须给出同一套可视标记——图右下角一个黑底「视频」角标；
+# 封面/首帧取不到（或尚在生成）时用同一张灰色占位图顶上。数值收敛到此处后，
+# 两边只能同时变，杜绝"一处改了另一处没跟上"的漂移。
+# ---------------------------------------------------------------------------
+TAG_W, TAG_H = 34, 18          # 角标尺寸
+TAG_RADIUS = 4                 # 角标圆角半径
+TAG_INSET = 3                  # 角标距图片右下边缘的内缩
+TAG_BG = "#0d0d10"             # 角标底色（贴在图上的深色块）
+TAG_FG = "#e8e8ec"             # 角标文字色
+TAG_FONT_SIZE = 8              # 角标字号
 
 
 def human_size(n: int | None) -> str:
@@ -98,6 +114,21 @@ def rounded_pts(x1: float, y1: float, x2: float, y2: float, r: int,
             a = start + (math.pi / 2) * i / seg
             pts += [cx + r * math.cos(a), cy + r * math.sin(a)]
     return pts
+
+
+def video_placeholder() -> Image.Image:
+    """视频的灰色占位图（灰底 + 线框 + 播放三角），封面/首帧取不到或尚未生成时使用。
+
+    刻意放在这个**共用叶子模块**里：两个挑选器共用同一张图，观感才一致。纯 Pillow
+    （不涉 Tk），调用方自行包成 ``ImageTk.PhotoImage`` 并按需缓存。
+    """
+    n = THUMB
+    im = Image.new("RGB", (n, n), (58, 58, 58))
+    d = ImageDraw.Draw(im)
+    c = n // 2
+    d.rectangle([c - 30, c - 22, c + 30, c + 22], outline=(150, 150, 150), width=2)
+    d.polygon([(c - 11, c - 12), (c - 11, c + 12), (c + 13, c)], fill=(190, 190, 190))
+    return im
 
 
 # ---------------------------------------------------------------------------

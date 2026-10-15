@@ -147,7 +147,9 @@ def test_card_geometry_is_shared():
     assert (cp.CARD_W, cp.CARD_H) == (tp.CARD_W, tp.CARD_H) \
         == (ui_kit.CARD_W, ui_kit.CARD_H)
     assert cp.IMG_BOX == tp.IMG_BOX == ui_kit.IMG_BOX
-    assert cp.THUMB == tp.THUMB == ui_kit.THUMB
+    # THUMB（缩略图边长上限）：缓存模式的缩略图由 cache_source 生成（THUMB 直接取自
+    # ui_kit），其 GUI 侧只经共享占位图间接使用；API 侧仍直接引用。
+    assert tp.THUMB == ui_kit.THUMB
     assert cp.GAP == tp.GAP == ui_kit.GAP
     # API 的单元格画布即卡片本身；缓存模式的步距 = 卡片 + 间隙，两者步距一致
     assert (tp.CELL_W, tp.CELL_H) == (cp.CARD_W, cp.CARD_H)
@@ -207,6 +209,53 @@ def test_api_thumb_items_switch(tk_root):
     assert it.cell.itemcget(it.img, "state") == "hidden"
     assert it.cell.itemcget(it.img_txt, "state") == "normal"
     assert it.cell.itemcget(it.img_txt, "text") == i18n.t("cell.no_preview")
+    app._on_close()
+
+
+@pytest.mark.gui
+def test_api_video_cell_has_tag_and_placeholder(tk_root):
+    """UI-1：API 视频单元格有与缓存**同一套**的「视频」角标与灰色占位图。
+
+    此前 API 的 ``add_item_cell`` 既不画角标，取不到封面时也只显示「无预览」文字，
+    与缓存模式的视频观感不一致；修复后两者共用同一份几何/配色与占位图。
+    """
+    from PIL import Image
+
+    i18n.set_language("zh")
+    app = tp.App(tk_root)
+    it = tp.MediaItem(msg_id=8, date=datetime.datetime(2026, 10, 10), kind="video",
+                      size=100, file_name=None, mime="video/mp4", msg=_FakeMsg())
+    app.items.append(it)
+    app.by_id[it.msg_id] = it
+    app.add_item_cell(it)
+
+    # 角标几何/配色与占位图实现均**同源**自 ui_kit（两模式只能同时变）
+    assert (tp.TAG_W, tp.TAG_H, tp.TAG_RADIUS) == \
+        (cp.TAG_W, cp.TAG_H, cp.TAG_RADIUS) == \
+        (ui_kit.TAG_W, ui_kit.TAG_H, ui_kit.TAG_RADIUS)
+    assert tp.TAG_BG == cp.TAG_BG == ui_kit.TAG_BG
+    assert tp.TAG_FG == cp.TAG_FG == ui_kit.TAG_FG
+    assert tp.video_placeholder is ui_kit.video_placeholder
+
+    # 视频创建后即显示占位图 + 角标（既不是「…」也不是「无预览」）
+    assert it.cell.itemcget(it.img, "state") == "normal"
+    assert it.cell.itemcget(it.img_txt, "state") == "hidden"
+    assert it.cell.itemcget(it.tag, "state") == "normal"
+    assert it.cell.itemcget(it.tag_txt, "state") == "normal"
+    assert it.cell.itemcget(it.tag_txt, "text") == i18n.t("cell.video_tag")
+    assert app._video_placeholder().width() == ui_kit.THUMB, "占位图应为共用实现"
+
+    # 拿到真实封面：替换为封面，角标仍在
+    app._msg_thumb(("thumb", it.msg_id, Image.new("RGB", (60, 40), "red")))
+    assert it.cell.itemcget(it.img, "state") == "normal"
+    assert it.cell.itemcget(it.tag, "state") == "normal"
+
+    # 封面取不到：回退占位图 + 角标（而非「无预览」）
+    app._msg_thumb(("thumb", it.msg_id, None))
+    assert it.thumb_failed is True
+    assert it.cell.itemcget(it.img, "state") == "normal", "视频取不到封面应回退占位图"
+    assert it.cell.itemcget(it.img_txt, "state") == "hidden"
+    assert it.cell.itemcget(it.tag, "state") == "normal"
     app._on_close()
 
 
