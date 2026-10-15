@@ -194,3 +194,30 @@ def test_job_window_never_submits_everything_at_once():
         taken += 1
         assert len(pool.submitted) - taken <= 4, "在途任务数不得超过窗口大小"
     assert pool.submitted == jobs, "最终每个待办都应被提交过"
+
+
+def test_oversized_media_raises_specific_error(tdata_dir: Path, monkeypatch):
+    """LOG-1：明文超过 ``MAX_DECRYPT_BYTES`` 时抛 ``MediaTooLargeError``（``CacheError`` 子类）。
+
+    单列类型是为了让界面能把"体积过大"与其它解密失败区分开、给出针对性提示；
+    仍是 ``CacheError`` 子类，故既有 ``except CacheError`` 处理保持兼容。
+    """
+    monkeypatch.setattr(cs, "MAX_DECRYPT_BYTES", 1)      # 任何非空文件都算"过大"
+    reader = cs.CacheReader(tdata_dir)
+    entry = reader.entries()[0]
+    with pytest.raises(cs.MediaTooLargeError) as excinfo:
+        reader.decrypt(entry.cache_path)
+    assert isinstance(excinfo.value, cs.CacheError)
+    with pytest.raises(cs.MediaTooLargeError):
+        next(reader.iter_decrypted(entry.cache_path))
+
+
+def test_iter_decrypted_matches_whole_decrypt(tdata_dir: Path):
+    """LOG-2：分块解密与整份解密逐字节一致（导出改流式后输出不变）。"""
+    reader = cs.CacheReader(tdata_dir)
+    checked = 0
+    for entry in reader.entries()[:40]:
+        whole = reader.decrypt(entry.cache_path)
+        assert b"".join(reader.iter_decrypted(entry.cache_path)) == whole, entry.rel
+        checked += 1
+    assert checked > 0, "没有可校验的缓存文件"

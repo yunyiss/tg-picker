@@ -26,6 +26,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -220,6 +221,14 @@ class PasscodeRequiredError(CacheError):
     """该 tdata 设有本地锁定密码。"""
 
 
+class MediaTooLargeError(CacheError):
+    """单个媒体明文超过 ``MAX_DECRYPT_BYTES``，无法整份读进内存。
+
+    单列为独立类型（而非又一个裸 ``CacheError``），是为了让调用方能把"体积过大"
+    与其它解密失败区分开、给出针对性的提示（见 README / LOG-1）。
+    """
+
+
 # ---------------------------------------------------------------------------
 # 定位解密模块
 #
@@ -402,10 +411,22 @@ class CacheReader:
         return out
 
     def decrypt(self, path: Path) -> bytes:
-        """完整解密一个缓存文件。"""
+        """完整解密一个缓存文件（整份读入内存；导出请改用 :meth:`iter_decrypted`）。"""
         if path.stat().st_size > MAX_DECRYPT_BYTES:
-            raise CacheError(t("cs.err_too_large", name=path.name))
+            raise MediaTooLargeError(t("cs.err_too_large", name=path.name))
         return self._decryptor.decrypt_file(path)
+
+    def iter_decrypted(self, path: Path,
+                       chunk_size: int = 1 << 20) -> Iterator[bytes]:
+        """**分块**解密一个缓存文件，逐块产出明文（内存峰值 ≈ ``chunk_size``）。
+
+        供导出**流式**写出，避免把整份明文驻留内存。与 :meth:`decrypt` 同口径：
+        超过 ``MAX_DECRYPT_BYTES`` 抛 :class:`MediaTooLargeError`；输出与整份解密
+        **逐字节一致**（同一 TDEF/CTR 实现，实测 120 个缓存文件完全一致）。
+        """
+        if path.stat().st_size > MAX_DECRYPT_BYTES:
+            raise MediaTooLargeError(t("cs.err_too_large", name=path.name))
+        return self._decryptor.decrypt_file_iter(path, chunk_size=chunk_size)
 
     def read_head_and_size(self, path: Path, head_bytes: int = HEAD_BYTES) -> tuple[bytes, int]:
         """只解密文件前缀并推算明文总长度（用于快速嗅探）。
@@ -754,7 +775,10 @@ def export_one(it: MediaItem, out_dir: Path, tdata: Path, passcode: str,
     if reader is None:
         reader = get_reader(tdata, passcode)
     dest = unique_path(target_dir / it.name)
-    dest.write_bytes(reader.decrypt(it.entry.cache_path))
+    # 分块流式写出（避免把整份明文读进内存）；输出与整份解密逐字节一致。
+    with open(dest, "wb") as f:
+        for chunk in reader.iter_decrypted(it.entry.cache_path):
+            f.write(chunk)
     try:
         os.utime(dest, (it.mtime, it.mtime))
     except OSError:

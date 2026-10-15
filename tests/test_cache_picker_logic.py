@@ -158,6 +158,17 @@ def test_save_by_date_creates_dated_subfolders(tdata_dir: Path, tmp_path: Path):
     assert subs and all(re.fullmatch(r"\d{4}-\d{2}-\d{2}", s) for s in subs), subs
 
 
+def test_export_one_streams_identical_bytes(tdata_dir: Path, tmp_path: Path):
+    """LOG-2：导出改为分块流式写出后，落盘内容仍与整份解密**逐字节一致**。"""
+    entries, _ = cp.load_cache(tdata_dir, "")
+    picked = _images(entries, 1)
+    assert picked, "样本里没有图片可用"
+    it = picked[0]
+    dest = cp.export_one(it, tmp_path / "stream", tdata_dir, "")
+    reader = cs.get_reader(tdata_dir, "")
+    assert dest.read_bytes() == reader.decrypt(it.entry.cache_path), "流式导出字节应与整份一致"
+
+
 def test_export_one_decrypts_to_file(tdata_dir: Path, tmp_path: Path):
     """双击导出：应解密成非空文件，且重名加后缀而不覆盖。"""
     entries, _ = cp.load_cache(tdata_dir, "")

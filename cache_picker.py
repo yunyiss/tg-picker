@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import logging
 import os
 import queue
 import shutil
@@ -46,6 +47,7 @@ from ui_kit import (
     FONT,
     GAP,
     IMG_BOX,
+    LOG_NAME,
     TAG_BG,
     TAG_FG,
     TAG_FONT_SIZE,
@@ -83,6 +85,10 @@ THUMB_DIR = DATA_DIR / "cache_thumbs"
 INDEX_PATH = DATA_DIR / "cache_index.json"
 VIDEO_TMP_DIR = DATA_DIR / "tmp_video"   # 视频抽帧的临时目录（用完即删）
 EXPORT_DIR = app_paths.export_dir()      # 默认导出目录：与 API 模式共用同一个
+
+# 日志：三个入口共用同一个 logger（输出落到数据目录的 logs/，见 ui_kit.enable_file_log）。
+# 缩略图在后台线程按需生成，个别"体积过大"等异常必须在日志里留痕，否则用户无从排查。
+_log = logging.getLogger(LOG_NAME)
 
 
 def _app_title() -> str:
@@ -1308,6 +1314,10 @@ class CacheApp(LangMixin):
                         except OSError:
                             pass
                 self.photo_queue.put((idx, rel, img, kind))
+            except cs.MediaTooLargeError as exc:
+                # 明文超过上限、无法整份解密：占位图照旧，但留一条日志说明原因
+                _log.warning("生成缩略图跳过（明文过大）：%s：%s", rel, exc)
+                self.photo_queue.put((idx, rel, None, kind))
             except Exception:
                 self.photo_queue.put((idx, rel, None, kind))
 
@@ -1611,12 +1621,16 @@ class CacheApp(LangMixin):
         if not items:
             return
         total_size = sum(it.size for it in items)
-        if not messagebox.askyesno(
-            _app_title(),
-            t("cache.dialog.confirm_save", n=len(items), size=human_size(total_size),
-              out=out,
-              by_date=t("cache.dialog.confirm_save_bydate") if self.v_bydate.get() else ""),
-        ):
+        msg = t("cache.dialog.confirm_save", n=len(items), size=human_size(total_size),
+                out=out,
+                by_date=t("cache.dialog.confirm_save_bydate") if self.v_bydate.get() else "")
+        # 超过 MAX_DECRYPT_BYTES 的条目无法整份解密、保存时必然失败——在确认框里**先说清**，
+        # 免得用户把它当成"静默失败"去翻日志（LOG-1）。
+        oversized = sum(1 for it in items if it.size > cs.MAX_DECRYPT_BYTES)
+        if oversized:
+            msg += "\n\n" + t("cache.dialog.too_large_warn", n=oversized,
+                              size=human_size(cs.MAX_DECRYPT_BYTES))
+        if not messagebox.askyesno(_app_title(), msg):
             return
 
         self.busy = True

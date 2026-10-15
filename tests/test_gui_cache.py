@@ -418,7 +418,9 @@ def test_save_items_logs_per_item_failure(tmp_path, caplog):
     """
 
     class BoomReader:
-        def decrypt(self, path) -> bytes:
+        """桩：导出已改为分块流式（``iter_decrypted``），故实现新接口并抛错。"""
+
+        def iter_decrypted(self, path, chunk_size: int = 1 << 20):
             raise OSError("磁盘满 / 文件被占用")
 
     item = _minimal_item("boom")
@@ -430,3 +432,32 @@ def test_save_items_logs_per_item_failure(tmp_path, caplog):
     text = caplog.text
     assert item.name in text, f"日志里应能看出是哪一条失败：{text}"
     assert "OSError" in text and "磁盘满" in text, f"日志里应带失败原因：{text}"
+
+
+@pytest.mark.gui
+def test_save_warns_about_items_exceeding_decrypt_limit(tk_root, tmp_path, monkeypatch):
+    """LOG-1：对超过 ``MAX_DECRYPT_BYTES``（注定保存失败）的选中项，确认框里先给出提示。"""
+    i18n.set_language("zh")
+    app = cp.CacheApp(tk_root)
+    big = cp.MediaItem(entry=cs.CacheEntry(
+        cache_path=Path("dummy"), rel="big", label="cache", mtime=1_700_000_000.0,
+        enc_size=1, kind="image", ext=".jpg", size=cs.MAX_DECRYPT_BYTES + 1,
+        thumb_key="big"))
+    app.all_items = [big]
+    app.items = [big]
+    app.selected = {"big"}
+    app.e_out.delete(0, "end")
+    app.e_out.insert(0, str(tmp_path))
+
+    seen: dict[str, str] = {}
+    monkeypatch.setattr(cp.messagebox, "askyesno",
+                        lambda title, msg, **kw: seen.setdefault("msg", msg) and False)
+
+    app.on_save()
+
+    assert "msg" in seen, "应弹出保存确认框"
+    expected = i18n.t("cache.dialog.too_large_warn", n=1,
+                      size=cp.human_size(cs.MAX_DECRYPT_BYTES))
+    assert expected in seen["msg"], seen["msg"]
+    assert app.busy is False, "用户取消后不应进入忙碌态"
+    app._on_close()

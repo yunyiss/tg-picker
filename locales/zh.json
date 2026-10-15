@@ -104,6 +104,7 @@
   "cache.dialog.no_out_dir": "请先选择保存到的目录",
   "cache.dialog.confirm_save": "将保存 {n} 个文件（约 {size}）到：\n{out}\n\n{by_date}原 tdata 缓存不会被改动。",
   "cache.dialog.confirm_save_bydate": "（按日期分文件夹）\n",
+  "cache.dialog.too_large_warn": "其中 {n} 条超过 {size}，保存时会失败（原因见日志文件）。",
 
   "online.login.title": "① 登录（首次需在 my.telegram.org 申请 api_id / api_hash）",
   "online.login.api_id": "api_id",

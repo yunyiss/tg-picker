@@ -104,6 +104,7 @@
   "cache.dialog.no_out_dir": "Please choose an output folder first.",
   "cache.dialog.confirm_save": "Save {n} file(s) (~{size}) to:\n{out}\n\n{by_date}The original tdata cache will not be modified.",
   "cache.dialog.confirm_save_bydate": "(Split into date subfolders)\n",
+  "cache.dialog.too_large_warn": "Note: {n} item(s) exceed {size} and will fail to save (see the log file).",
 
   "online.login.title": "① Sign in (get api_id / api_hash from my.telegram.org first)",
   "online.login.api_id": "api_id",
