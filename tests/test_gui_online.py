@@ -116,6 +116,37 @@ def test_prompter_ask_does_not_block_event_loop():
         runner.join(timeout=5)
 
 
+def test_thumb_bytes_bounds_whole_file_fallback():
+    """回归（API-1）：末档"整文件兜底"受体积上限约束，且视频/文件不再做整文件兜底。
+
+    视频若不设限，封面取不到时会把 GB 级视频整份读进内存——而拿回的是原视频（不是
+    图片，PIL 解不了），纯属白下载。照片的"整份原件"兜底则有意义，但超过
+    ``WHOLE_FILE_MAX_BYTES``（或体积未知）也应放弃。
+    """
+
+    class FakeClient:
+        def __init__(self) -> None:
+            self.calls: list[dict] = []
+
+        async def download_media(self, msg, file=None, **kw):
+            self.calls.append(dict(kw))
+            return None                                         # 无数据 → 继续下一策略
+
+    async def collect(kind: str, size: int | None) -> list[dict]:
+        it = tp.MediaItem(msg_id=1, date=datetime.datetime(2026, 10, 10), kind=kind,
+                          size=size, file_name=None, mime="", msg=_FakeMsg())
+        worker = tp.Worker.__new__(tp.Worker)      # 不启动线程/事件循环，只用 _thumb_bytes
+        worker.client = FakeClient()
+        assert await worker._thumb_bytes(it) == b""
+        return worker.client.calls
+
+    assert asyncio.run(collect("video", 3 << 30)) == [{"thumb": -1}], "视频应只试内嵌封面"
+    assert {} not in asyncio.run(collect("file", 1 << 30)), "文件也不做整文件兜底"
+    assert {} not in asyncio.run(collect("photo", None)), "照片体积未知 → 不做整文件兜底"
+    assert {} not in asyncio.run(collect("photo", tp.WHOLE_FILE_MAX_BYTES + 1)), "超上限应跳过"
+    assert asyncio.run(collect("photo", 1024))[-1] == {}, "限内的照片仍可整文件兜底"
+
+
 @pytest.mark.gui
 def test_online_double_click_confirms_before_download(tk_root, monkeypatch):
     """回归：双击缩略图必须**先弹确认**；取消则不下单，确认才提交下载。"""

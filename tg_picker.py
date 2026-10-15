@@ -104,6 +104,9 @@ PROMPT_TIMEOUT = 300
 # 缩略图并发抓取路数：逐条串行 + 每条 sleep 时，一批 500 条要白等 25 秒。
 # 改为 N 路并发，控速 sleep 放在并发名额**之外**，兼顾速度与服务端温和度。
 THUMB_CONCURRENCY = 3
+# 照片"整份原件兜底"的体积上限：超过（或体积未知）就放弃——宁可显示占位图，
+# 也不把大文件整份读进内存。视频 / 文件则**不做**整文件兜底（见 _thumb_bytes）。
+WHOLE_FILE_MAX_BYTES = 16 * 1024 * 1024
 
 IMAGE_EXT = {"image/jpeg": ".jpg", "image/png": ".png",
              "image/webp": ".webp", "image/gif": ".gif"}
@@ -577,16 +580,24 @@ class Worker:
 
     # ----- 缩略图 -----
     async def _thumb_bytes(self, it: MediaItem) -> bytes:
-        """按媒体类型挑合适的缩略图尺寸，多种策略依次尝试。
+        """按媒体类型挑合适的缩略图尺寸，多种策略依次尝试；都失败则返回空字节。
 
-        照片优先取较小的尺寸（网格里够用且快），视频/文件取内嵌封面图；
-        任一策略失败就退回整文件，最后仍失败则返回空字节。
+        照片：先取小图、再取大图，最后才退回"整份原件"——原图一定是图片、能出图，故这条
+        兜底有意义，但用 ``it.size`` 设了体积上限（``WHOLE_FILE_MAX_BYTES``），超限或体积
+        未知即放弃。
+        视频 / 文件：**只取内嵌封面**（``thumb=-1``）。末档"整份原件"拿回的是原视频 / 原文档
+        （不是图片，PIL 解不了），既出不了缩略图，又会把 GB 级视频整份读进内存——故不再兜底
+        （取不到就交给界面显示占位图）。
         """
         if it.kind == "photo":
             strategies: list[dict] = [{"thumb": 1}, {"thumb": 0}, {}]
         else:
-            strategies = [{"thumb": -1}, {}]
+            strategies = [{"thumb": -1}]
+        size = it.size
         for kw in strategies:
+            # 末档"整文件兜底"（不带 thumb 参数）体积不受控：未知或过大一律跳过
+            if not kw and (size is None or size > WHOLE_FILE_MAX_BYTES):
+                continue
             try:
                 buf = io.BytesIO()
                 got = await self.client.download_media(it.msg, file=buf, **kw)
