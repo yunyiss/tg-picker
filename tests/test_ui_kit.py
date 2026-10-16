@@ -1,7 +1,9 @@
-"""ui_kit 的单元测试：路径工具与「无控制台时的日志接管」。"""
+"""ui_kit 的单元测试：路径工具、「无控制台时的日志接管」与「用文件管理器打开目录」。"""
 from __future__ import annotations
 
 import logging
+import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +25,39 @@ def _clean_log_handlers():
     _close_log_handlers()
     yield
     _close_log_handlers()
+
+
+def test_child_env_strips_bundled_library_paths(monkeypatch):
+    """冻结包注入的私有库路径不能留给外部程序。
+
+    PyInstaller 冻结后会把 LD_LIBRARY_PATH 指到包内 `_internal`；子进程继承后
+    会去加载我们包里的库而崩溃——这正是"点打开目录毫无反应"的成因之一。
+    """
+    monkeypatch.setenv("LD_LIBRARY_PATH", "/opt/tg-picker/_internal")
+    monkeypatch.setenv("PYTHONHOME", "/opt/tg-picker")
+    monkeypatch.setenv("KEEP_ME", "1")
+    env = ui_kit._child_env()
+    assert "LD_LIBRARY_PATH" not in env
+    assert "PYTHONHOME" not in env
+    assert env["KEEP_ME"] == "1", "无关变量应原样保留"
+
+
+def test_launch_false_when_process_exits_nonzero():
+    """进程起得来却立刻以非 0 退出，必须算失败（否则界面"点了没反应"）。"""
+    env = dict(os.environ)
+    assert ui_kit._launch([sys.executable, "-c", "import sys; sys.exit(3)"], env) is False
+    assert ui_kit._launch([sys.executable, "-c", "import sys; sys.exit(0)"], env) is True
+
+
+def test_launch_true_while_process_still_running():
+    """仍在运行（文件管理器窗口）视为成功，不能傻等。"""
+    env = dict(os.environ)
+    assert ui_kit._launch([sys.executable, "-c", "import time; time.sleep(4)"], env) is True
+
+
+def test_launch_false_when_executable_missing():
+    """可执行文件不存在（无 xdg-open 等）返回 False，交给调用方兜底。"""
+    assert ui_kit._launch(["no-such-program-xyz", "/tmp"], dict(os.environ)) is False
 
 
 def test_unique_path_adds_suffix(tmp_path: Path):

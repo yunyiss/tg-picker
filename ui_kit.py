@@ -15,6 +15,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -223,25 +224,78 @@ def gear_workers(key: str, info: HardwareInfo, recommended: int | None = None) -
 # ---------------------------------------------------------------------------
 # 系统集成：用文件管理器打开目录
 # ---------------------------------------------------------------------------
+def _child_env() -> dict[str, str]:
+    """给外部程序准备一份干净环境。
+
+    PyInstaller 冻结后会往 ``LD_LIBRARY_PATH``（Linux）/ ``DYLD_*``（macOS）里注入
+    包私有库路径；子进程继承它就会去加载我们包内的库而崩溃——这是"点打开目录
+    毫无反应"的常见成因之一。
+    """
+    env = dict(os.environ)
+    for key in (
+        "LD_LIBRARY_PATH", "LD_PRELOAD",
+        "DYLD_LIBRARY_PATH", "DYLD_FALLBACK_LIBRARY_PATH",
+        "PYTHONHOME", "PYTHONPATH",
+    ):
+        env.pop(key, None)
+    return env
+
+
+def _launch(cmd: list[str], env: dict[str, str]) -> bool:
+    """启动外部程序，并判断它**是否真的起来了**。
+
+    只看 ``Popen`` 有没有抛错是不够的：进程起得来却立刻以非 0 退出（没有可用的
+    文件管理器、mime 默认处理器指向不存在的程序等）同样是失败，必须让调用方
+    知道，才能走剪贴板兜底、给用户反馈。
+    """
+    try:
+        proc = subprocess.Popen(
+            cmd, env=env,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return False
+    try:
+        return proc.wait(timeout=1.5) == 0   # 很快退出：以退出码定成败
+    except subprocess.TimeoutExpired:
+        return True                          # 仍在运行（文件管理器窗口）→ 成功
+
+
+# Linux 上按顺序尝试的"真正的文件管理器"（桌面自带的最优先）。
+# 不能只依赖 ``xdg-open <目录>``：``inode/directory`` 的 mime 默认处理器可能是
+# 搜索工具（Kali 上实测就是 org.xfce.Catfish）甚至指向不存在的程序，于是
+# "打开目录"没反应。
+_LINUX_FILE_MANAGERS = (
+    "thunar", "nautilus", "nemo", "dolphin", "caja", "pcmanfm", "pcmanfm-qt",
+)
+
+
 def open_folder(path: Path) -> bool:
     """用系统文件管理器打开目录；成功返回 ``True``。
 
-    失败（本机对 shell open 受限、无 ``xdg-open`` 等）返回 ``False``，
+    失败（本机对 shell open 受限、没有可用文件管理器等）返回 ``False``，
     由调用方决定兜底方式（缓存挑选器会回退为把绝对路径写入剪贴板）。
 
-    打开目录是**有意的用户动作**，故直接交给系统外壳执行。
+    打开目录是**有意的用户动作**，故交给系统外壳执行；但要**验证它真的成功**，
+    否则失败会表现为"点了没反应"。
     """
     path = Path(path)
-    try:
-        if sys.platform == "win32":
+    if sys.platform == "win32":
+        try:
             os.startfile(path)
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(path)])
-        else:
-            subprocess.Popen(["xdg-open", str(path)])
-    except OSError:
-        return False
-    return True
+        except OSError:
+            return False
+        return True
+
+    target = str(path)
+    env = _child_env()
+    if sys.platform == "darwin":
+        return _launch(["open", target], env)
+
+    exe = next((p for fm in _LINUX_FILE_MANAGERS if (p := shutil.which(fm))), None)
+    if exe is not None and _launch([exe, target], env):
+        return True
+    return _launch(["xdg-open", target], env)
 
 
 # ---------------------------------------------------------------------------

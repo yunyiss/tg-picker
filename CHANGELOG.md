@@ -1,5 +1,23 @@
 # 变更记录
 
+## 2026-10-16（修复：Linux 上「打开目录」点了没反应）
+
+### 修复 · `ui_kit.open_folder` 校验是否真的打开成功；Linux 改用真实文件管理器
+- **现象**：Linux（Kali 实机）点「打开目录」**毫无反应**——不打开文件管理器，也没有任何提示。
+- **原因**（两层）：
+  1. 旧实现 Linux 只做 `subprocess.Popen(["xdg-open", 目录])`，**只看进程能不能起来**。
+     `xdg-open` 存在但执行失败时 `Popen` 并不抛错，于是被判为"已打开"——既不走剪贴板兜底，
+     也没有任何反馈，用户只能看到"没反应"；
+  2. Kali 上 `inode/directory` 的 mime 默认处理器实测是 **`org.xfce.Catfish.desktop`**
+     （搜索工具，不是文件管理器），`xdg-open 目录` 本就不是期望行为。另外 PyInstaller
+     冻结后会把 `LD_LIBRARY_PATH` 指到包内 `_internal`，子进程继承后会加载我们包里的库而崩溃。
+- **修改**：`open_folder` —— Windows 分支不变（`os.startfile`）；macOS 走 `open`；
+  Linux **先找真正的文件管理器**（thunar / nautilus / nemo / dolphin / caja / pcmanfm…），
+  找不到再退回 `xdg-open`；所有外部程序都在**去掉冻结包私有库路径的干净环境**里启动；
+  并用 `proc.wait(timeout=1.5)` **检查它是否真的起来了**（非 0 退出 = 失败 → 由调用方走
+  剪贴板兜底并给出提示）。
+- **验证**：新增 4 条单元测试（环境清理、非 0 退出判失败、仍在运行判成功、可执行文件缺失判失败）。
+
 ## 2026-10-16（瘦身：Linux 包 strip 掉 CPython 调试信息）
 
 ### 瘦身 · Linux 打包加 `--strip`（41MB → 预计 ~25MB）
