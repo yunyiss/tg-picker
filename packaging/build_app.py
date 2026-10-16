@@ -7,6 +7,9 @@
 冷启动明显变慢；onedir 是"一个文件夹（小 exe + 依赖）"，启动快、体积相同。
 
 ffmpeg 由 ``packaging/build_ffmpeg.sh`` 构建（见该脚本里的配方）。
+
+Linux 上额外加 ``--strip``：CI 用的 CPython 带完整调试信息（libpython 实测 30MB+），
+strip 后 Linux 包体积小一大截。
 """
 from __future__ import annotations
 
@@ -75,6 +78,13 @@ def main() -> int:
         "--add-data", f"{ROOT / 'LICENSE'}{sep}.",
         "--add-data", f"{ROOT / 'THIRD-PARTY-NOTICES.txt'}{sep}.",
     ]
+    # Linux：CI 用的 CPython（actions/setup-python）是**未 strip** 的构建，随包的
+    # libpython3.13.so.1.0 实测 30.7MB（含 .symtab/.debug_info/.debug_line/.debug_str），
+    # lib-dynload/*.so 合计 17MB —— 让 Linux 包比 Windows 大近一倍（41MB vs 22MB）。
+    # 让 PyInstaller 顺带 strip 掉这些符号/调试信息。只在 Linux 启用：Windows 上该选项
+    # 不适用；macOS 上 strip 有签名/动态加载风险，不加。
+    if sys.platform.startswith("linux"):
+        cmd.append("--strip")
     for h in HIDDEN:
         cmd += ["--hidden-import", h]
     for m in EXCLUDE:

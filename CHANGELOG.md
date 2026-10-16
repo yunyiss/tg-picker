@@ -1,5 +1,20 @@
 # 变更记录
 
+## 2026-10-16（瘦身：Linux 包 strip 掉 CPython 调试信息）
+
+### 瘦身 · Linux 打包加 `--strip`（41MB → 预计 ~25MB）
+- **现象**：Release 上 Linux 包 41.5MB，Windows 只有 22.3MB，接近 2 倍。
+- **原因**：`actions/setup-python` 提供的 CPython 是**未 strip** 的构建——实测随包的
+  `libpython3.13.so.1.0` 达 **30.68MB**，且含 `.symtab` / `.debug_info` / `.debug_line` /
+  `.debug_str`；`python3.13/lib-dynload/*.so` 合计 17.1MB。PyInstaller 原样打进包。
+  而 Windows 的 `python313.dll`（6.14MB）与 Debian/Kali 的系统 Python（7.2MB）都做过 strip，
+  所以只有 Linux 侧虚胖（同样代码在 Kali 上打就只有 29MB）。
+- **修改**：`packaging/build_app.py` 在 **Linux** 上追加 PyInstaller 的 `--strip`（Windows 上该
+  选项不适用、macOS 上 strip 有签名/动态加载风险，两者都不加）。另把 release 作业的发布步骤
+  改为"**已存在同名 Release 就只替换附件**（`gh release upload --clobber`），否则新建"——
+  重打 tag 不再因"Release 已存在"失败，也不会覆盖手写的发布说明。
+- **验证**：CI 构建通过 + Linux 实机跑一遍（strip 后的库需实测确认无加载问题）。
+
 ## 2026-10-16（修复：Release 作业失败——gh 没有 git 上下文）
 
 ### 修复 · release 作业补 checkout 与 `--repo`（`gh release create` 报 "not a git repository"）
